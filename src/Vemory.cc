@@ -18,7 +18,7 @@
 #include "vemory/util/Logging.h"
 
 namespace {
-constexpr uint16_t kDefaultPort = 6379;
+constexpr uint16_t kDefaultPort = 8989;
 
 void PrintUsage(const char* argv0) {
   std::cerr << "Usage: " << argv0 << " [port]\n"

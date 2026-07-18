@@ -8,9 +8,9 @@
 set -euo pipefail
 
 VEMORY_HOST="${VEMORY_HOST:-127.0.0.1}"
-VEMORY_PORT="${VEMORY_PORT:-6379}"
+VEMORY_PORT="${VEMORY_PORT:-8989}"
 REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
-REDIS_PORT="${REDIS_PORT:-6380}"
+REDIS_PORT="${REDIS_PORT:-6379}"
 R="${R:-10000}"
 D="${D:-64}"
 # Space-separated pipeline depths (override with PIPELINES="10 20").

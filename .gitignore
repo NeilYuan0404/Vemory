@@ -1,0 +1,8 @@
+/build/
+/bin/
+/generated/
+*.o
+*.a
+*.so
+.cache/
+/third_party/googletest/

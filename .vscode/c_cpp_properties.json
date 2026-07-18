@@ -1,0 +1,23 @@
+{
+  "configurations": [
+    {
+      "name": "linux-gcc-x64",
+      "includePath": [
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/third_party/googletest/googletest/include",
+        "${workspaceFolder}"
+      ],
+      "defines": [],
+      "compilerPath": "/usr/bin/g++",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "linux-gcc-x64",
+      "compileCommands": "${workspaceFolder}/compile_commands.json",
+      "compilerArgs": [
+        "-std=c++17",
+        "-I${workspaceFolder}/include"
+      ]
+    }
+  ],
+  "version": 4
+}

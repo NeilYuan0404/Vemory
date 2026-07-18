@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package vemory;
+
+// Canonical serialized form for a Q&A node (replication / future persist).
+// Storage key is `id` (assigned by VNodeStorage; left 0 until Put).
+message VNodePb {
+  uint32 id = 1;
+  string prompt = 2;
+  string answer = 3;
+}

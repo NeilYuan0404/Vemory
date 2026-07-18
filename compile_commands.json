@@ -1,0 +1,147 @@
+[
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/Vemory.cc",
+    "file": "src/Vemory.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/index/USearchEmbedIndex.cc",
+    "file": "src/index/USearchEmbedIndex.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/index/VectorSet.cc",
+    "file": "src/index/VectorSet.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/index/VectorSetRegistry.cc",
+    "file": "src/index/VectorSetRegistry.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/net/TcpConnection.cc",
+    "file": "src/net/TcpConnection.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/net/TcpServer.cc",
+    "file": "src/net/TcpServer.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/CommandHandler.cc",
+    "file": "src/protocol/CommandHandler.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/CommandType.cc",
+    "file": "src/protocol/CommandType.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/HandlerRegister.cc",
+    "file": "src/protocol/HandlerRegister.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/KvsDispatcher.cc",
+    "file": "src/protocol/KvsDispatcher.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/ProtocolExecutor.cc",
+    "file": "src/protocol/ProtocolExecutor.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/RequestContext.cc",
+    "file": "src/protocol/RequestContext.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/VectorDispatcher.cc",
+    "file": "src/protocol/VectorDispatcher.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/resp/RespDecode.cc",
+    "file": "src/protocol/resp/RespDecode.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/resp/RespEncode.cc",
+    "file": "src/protocol/resp/RespEncode.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/resp/RespHandler.cc",
+    "file": "src/protocol/resp/RespHandler.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/protocol/resp/RespProtocolHandler.cc",
+    "file": "src/protocol/resp/RespProtocolHandler.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/storage/KvStore.cc",
+    "file": "src/storage/KvStore.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/storage/ProtobufVNodeCodec.cc",
+    "file": "src/storage/ProtobufVNodeCodec.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/storage/VNodeStorage.cc",
+    "file": "src/storage/VNodeStorage.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c src/util/Logging.cc",
+    "file": "src/util/Logging.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c generated/VNode.pb.cc",
+    "file": "generated/VNode.pb.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -c tests/testcase.cc",
+    "file": "tests/testcase.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest -pthread -c tests/unit/test_message_buffer.cc",
+    "file": "tests/unit/test_message_buffer.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest -pthread -c tests/unit/test_protocol_executor.cc",
+    "file": "tests/unit/test_protocol_executor.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest -pthread -c tests/unit/test_request_context.cc",
+    "file": "tests/unit/test_request_context.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest -pthread -c tests/unit/test_resp.cc",
+    "file": "tests/unit/test_resp.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest -pthread -c tests/unit/test_usearch_embed_index.cc",
+    "file": "tests/unit/test_usearch_embed_index.cc"
+  },
+  {
+    "directory": "/home/gentleyuan/project/Vemory",
+    "command": "g++ -std=c++17 -Wall -Wextra -g -I/home/gentleyuan/project/Vemory/include -I/home/gentleyuan/project/Vemory/generated -I/home/gentleyuan/project/Vemory/third_party/usearch/include -I/home/gentleyuan/project/Vemory/third_party/usearch/fp16/include -I/home/gentleyuan/project/Vemory/third_party/spdlog/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest/include -I/home/gentleyuan/project/Vemory/third_party/googletest/googletest -pthread -c tests/unit/test_vector_commands.cc",
+    "file": "tests/unit/test_vector_commands.cc"
+  }
+]

@@ -46,8 +46,8 @@ PIPELINES="10 40 160" ./bench/pipeline.sh
 
 | Env | Default | Meaning |
 |-----|---------|---------|
-| `VEMORY_HOST` / `VEMORY_PORT` | `127.0.0.1` / `6379` | Vemory |
-| `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6380` | Redis |
+| `VEMORY_HOST` / `VEMORY_PORT` | `127.0.0.1` / `8989` | Vemory |
+| `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | Redis |
 | `N_P1` | `10000` | Requests when `P=1` (baselines) |
 | `N_MID` | `100000` | Requests when `P=10` or `20` |
 | `N_HIGH` | `1000000` | Requests when `P=40`, `100`, or `160` |

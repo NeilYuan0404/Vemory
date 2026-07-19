@@ -1,5 +1,6 @@
 #include "vemory/net/TcpServer.h"
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -21,7 +22,8 @@ TcpServer::~TcpServer() {
   }
 }
 
-void TcpServer::Start(uint16_t port, NewConnCallback cb) {
+void TcpServer::Start(const std::string& bind, uint16_t port,
+                      NewConnCallback cb) {
   new_conn_cb_ = cb;
   listen_fd_ = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);  // nonblock
   if (listen_fd_ == -1) {
@@ -31,8 +33,15 @@ void TcpServer::Start(uint16_t port, NewConnCallback cb) {
 
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_port = htons(port);
+  if (bind.empty() || bind == "0.0.0.0") {
+    addr.sin_addr.s_addr = INADDR_ANY;
+  } else if (inet_pton(AF_INET, bind.c_str(), &addr.sin_addr) != 1) {
+    spdlog::error("invalid bind address: {}", bind);
+    close(listen_fd_);
+    listen_fd_ = -1;
+    return;
+  }
 
   int opt = 1;
   if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) ==
@@ -40,30 +49,35 @@ void TcpServer::Start(uint16_t port, NewConnCallback cb) {
   {
     spdlog::error("setsockopt error: {}", errno);
     close(listen_fd_);
+    listen_fd_ = -1;
     return;
   }
   if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) ==
       -1) {
     spdlog::error("setsockopt error: {}", errno);
     close(listen_fd_);
+    listen_fd_ = -1;
     return;
   }
 
   if (::bind(listen_fd_, (sockaddr*)&addr, sizeof(addr)) == -1) {
     spdlog::error("bind error: {}", errno);
     close(listen_fd_);
+    listen_fd_ = -1;
     return;
   }
 
   if (::listen(listen_fd_, SOMAXCONN) == -1) {
     spdlog::error("listen error: {}", errno);
     close(listen_fd_);
+    listen_fd_ = -1;
     return;
   }
 
   accept_handler_ = [this](uint32_t) { HandleAccept(); };
   evloop_.AddEvent(listen_fd_, EPOLLIN | EPOLLET, &accept_handler_);
-  spdlog::info("Server started on port {}", port);
+  spdlog::info("Server started on {}:{}", bind.empty() ? "0.0.0.0" : bind,
+               port);
 }
 
 void TcpServer::HandleAccept() {

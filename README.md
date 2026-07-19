@@ -2,6 +2,8 @@
 
 RESP-speaking vector set server (Redis Vector Set–style subset). Talk to it with `redis-cli`.
 
+**v0.1.0 — early MVP.** Data is **in-memory only** (restart loses everything). Single-threaded epoll reactor. Command set is a **subset** of Redis Vector Set plus basic `SET`/`GET`/`DEL` — not a drop-in Redis replacement.
+
 ## Requirements
 
 - C++17 toolchain (`g++`)

@@ -26,7 +26,11 @@ COUNT = int(os.environ.get("COUNT", "10"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).resolve().parent / "data"))
 RECALL_GATE = 0.95
 MAX_CARD = 65534
-ANN_BASE_URL = "http://ann-benchmarks.com"
+ANN_URLS = (
+    "http://ann-benchmarks.com/{name}.hdf5",
+    "http://vectors.erikbern.com/{name}.hdf5",
+)
+_USER_AGENT = "Vemory-bench/1.0 (+https://github.com/NeilYuan0404/Vemory)"
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -35,11 +39,9 @@ def die(msg: str, code: int = 1) -> None:
 
 
 def download_hdf5(name: str, dest: Path) -> None:
-    url = f"{ANN_BASE_URL}/{name}.hdf5"
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".partial")
-    print(f"==> downloading {url}", file=sys.stderr)
-    print(f"    -> {dest}", file=sys.stderr)
+    errors: list[str] = []
 
     def progress(block_num: int, block_size: int, total_size: int) -> None:
         if total_size <= 0:
@@ -52,13 +54,35 @@ def download_hdf5(name: str, dest: Path) -> None:
         if done >= total_size:
             print(file=sys.stderr)
 
-    try:
-        urllib.request.urlretrieve(url, tmp, reporthook=progress)
-        tmp.replace(dest)
-    except Exception as exc:
-        if tmp.exists():
-            tmp.unlink()
-        die(f"download failed: {exc}")
+    for tmpl in ANN_URLS:
+        url = tmpl.format(name=name)
+        print(f"==> downloading {url}", file=sys.stderr)
+        print(f"    -> {dest}", file=sys.stderr)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+            with urllib.request.urlopen(req, timeout=120) as resp, open(
+                tmp, "wb"
+            ) as out:
+                total = int(resp.headers.get("Content-Length", "0") or "0")
+                chunk = 1024 * 256
+                got = 0
+                block = 0
+                while True:
+                    buf = resp.read(chunk)
+                    if not buf:
+                        break
+                    out.write(buf)
+                    got += len(buf)
+                    block += 1
+                    progress(block, chunk, total if total > 0 else got)
+            tmp.replace(dest)
+            return
+        except Exception as exc:
+            errors.append(f"{url}: {exc}")
+            if tmp.exists():
+                tmp.unlink()
+
+    die("download failed:\n  " + "\n  ".join(errors))
 
 
 def resolve_dataset(name: str) -> Path:

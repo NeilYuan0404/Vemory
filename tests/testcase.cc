@@ -18,7 +18,7 @@ int main() {
   CommandHandler commands(&registry);
   auto protocol = std::make_shared<RespProtocolHandler>();
 
-  server.Start(8989, [&commands, protocol](TcpConn::Ptr conn) {
+  server.Start("0.0.0.0", 8989, [&commands, protocol](TcpConn::Ptr conn) {
     std::cout << "New connection established\n";
 
     auto executor = std::make_shared<ProtocolExecutor>(

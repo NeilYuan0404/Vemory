@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <unordered_map>
 
 class TcpConn;
@@ -14,7 +16,8 @@ class TcpServer {
   TcpServer(EventLoop& evloop);
   ~TcpServer();
 
-  void Start(uint16_t port, NewConnCallback cb);
+  // bind: IPv4 address ("0.0.0.0" for all interfaces).
+  void Start(const std::string& bind, uint16_t port, NewConnCallback cb);
 
  private:
   void HandleAccept();

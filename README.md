@@ -44,8 +44,9 @@ Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 
 ```bash
 ./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
-./bench/smoke/pipeline.sh  # c=1 pipeline sweep vs Redis (SET / GET)
+./bench/smoke/pipeline.sh  # c=1 pipeline smoke (Vemory only)
 ./bench/smoke/vector.sh    # VADD warm-up + VSIM
+python3 bench/pipeline_bench.py                  # c=1 SET/GET: Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # Recall@10 / p50·p99 / QPS@recall≥0.95 (see bench/README.md)
 ```
 

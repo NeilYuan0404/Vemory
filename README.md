@@ -43,9 +43,10 @@ Unknown sections/keys are ignored (warned). A positional port still overrides `s
 Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 
 ```bash
-./bench/kvs.sh       # PING / ECHO / SET / GET
-./bench/pipeline.sh  # c=1 pipeline sweep vs Redis (SET / GET)
-./bench/vector.sh    # VADD warm-up + VSIM
+./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
+./bench/smoke/pipeline.sh  # c=1 pipeline sweep vs Redis (SET / GET)
+./bench/smoke/vector.sh    # VADD warm-up + VSIM
+bench/.venv/bin/python bench/vector_metrics.py   # Recall@10 / p50·p99 / QPS@recall≥0.95 (see bench/README.md)
 ```
 
 See [`bench/README.md`](bench/README.md).

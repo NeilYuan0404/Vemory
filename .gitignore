@@ -6,3 +6,6 @@
 *.so
 .cache/
 /third_party/googletest/
+/bench/data/*.hdf5
+/bench/data/*.hdf5.partial
+/bench/.venv/

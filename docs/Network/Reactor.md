@@ -8,7 +8,7 @@ EventLoop::Run
   ├─ listen_fd readable → TcpServer::HandleAccept → new TcpConn → NewConnCallback
   └─ conn_fd I/O       → TcpConn::HandleIO
                            ├─ EPOLLIN  → Recv → MessageBuffer → ReadCallback
-                           │              → ProtocolExecutor::OnReadable (official path)
+                           │              → ProtocolExecutor::OnBufferReadable (official path)
                            ├─ EPOLLOUT → flush output_buffer_
                            └─ error / half-close → Close
 ```
@@ -21,12 +21,14 @@ Test entry: `tests/testcase.cc` wires `RespProtocolHandler` + `ProtocolExecutor`
 
 epoll event loop: register / modify / delete fds, block-wait then dispatch callbacks, and drive `Timer`.
 
+Shared aliases (defined in `EventLoop.h`): `IoEvents` (`uint32_t` epoll mask), `IoHandler` (`std::function<void(IoEvents)>`).
+
 ### Interface
 
 | API | Signature | Notes |
 |-----|-----------|-------|
-| `AddEvent` | `(int fd, uint32_t events, void* ptr)` | `epoll_ctl(ADD)`; `ptr` must point to a callable `std::function<void(uint32_t)>*` |
-| `ModEvent` | `(int fd, uint32_t events, void* ptr)` | `epoll_ctl(MOD)` |
+| `AddEvent` | `(int fd, IoEvents events, void* ptr)` | `epoll_ctl(ADD)`; `ptr` must point to an `IoHandler*` |
+| `ModEvent` | `(int fd, IoEvents events, void* ptr)` | `epoll_ctl(MOD)` |
 | `DelEvent` | `(int fd)` | `epoll_ctl(DEL)` |
 | `Run` | `()` | Infinite loop: `epoll_wait` → invoke handler → `Timer::HandleTimeout` |
 
@@ -56,7 +58,7 @@ server.Start(port, [&](TcpConn::Ptr conn) {
   auto exec = make_shared<ProtocolExecutor>(
       protocol, on_dispatch, on_write, on_error);  // on_write = one Send per round
   conn->SetReadCallback([conn, exec] {
-    exec->OnReadable(conn->Fd(), conn->InputBuffer());
+    exec->OnBufferReadable(conn->Fd(), conn->InputBuffer());
   });
 });
 ```
@@ -71,15 +73,13 @@ server.Start(port, [&](TcpConn::Ptr conn) {
 |-----|-----------|-------|
 | `SetReadCallback` | `(ReadCallback)` | After a successful read round |
 | `Fd` | `() const` | Connection fd |
-| `InputBuffer` | `MessageBuffer&` | For `ProtocolExecutor` / parsers (do not mix with line helpers) |
-| `GetDataUntilCrLf` | `string()` | Line-protocol convenience only |
-| `GetAllData` | `string()` | Copy+consume all; **not** a RESP frame boundary |
+| `InputBuffer` | `MessageBuffer&` | For `ProtocolExecutor` / parsers |
 | `Send` | `(const char*, size_t)` | |
 
 ### Constraints
 
-- Official path: `SetReadCallback` → `ProtocolExecutor` → `RespProtocolHandler`. Do not call `RespHandler` from `TcpConn` itself.
-- `GetDataUntilCrLf` / `GetAllData` remain for debug/line demos only.
+- Official path: `SetReadCallback` → `ProtocolExecutor` → `RespProtocolHandler`. Do not call decode helpers from `TcpConn` itself.
+- Read buffer access is via `InputBuffer()` only; line/RESP helpers live on `MessageBuffer`.
 
 ---
 

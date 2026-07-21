@@ -9,7 +9,7 @@
 // Userspace read buffer: contiguous std::string storage for TCP fragment/coalesce.
 // Two read styles — do not mix:
 //   - Line protocol: GetDataUntilCRLF + ReadCompleted(line_len+2)
-//   - RESP (official commands): GetAllData + RespHandler/RespDecode + ReadCompleted(consumed)
+//   - RESP (official commands): GetAllData + RespDecode + ReadCompleted(consumed)
 class MessageBuffer {
  public:
   int Recv(int fd, int* err) {

@@ -10,7 +10,7 @@ I/O / connection layer: [`server.md`](server.md); RESP: [`Protocol.md`](Protocol
 | Style | API | Use for | Consume |
 |-------|-----|---------|---------|
 | **Line protocol** | `GetDataUntilCRLF` | One frame per line, ends with `\r\n` (debug, simple protocols) | `ReadCompleted(line_len + 2)` |
-| **RESP (this project's command channel)** | `GetAllData` + `RespHandler` / `RespDecode` | Redis-style multi-line frames (`*n` + `$len`…) | `ReadCompleted(consumed)` (full-frame byte count from the decoder) |
+| **RESP (this project's command channel)** | `GetAllData` + `RespDecode` (via `RespProtocolHandler`) | Redis-style multi-line frames (`*n` + `$len`…) | `ReadCompleted(consumed)` (full-frame byte count from the decoder) |
 
 Constraints:
 
@@ -40,7 +40,7 @@ ReadCompleted(n + 2)
 
 ### Typical usage: RESP (supported path)
 
-See [`Protocol.md`](Protocol.md): `ProtocolExecutor` → `RespProtocolHandler::TryParse` (`RespHandler` + `FromArgv`) → `ReadCompleted(consumed)`.  
+See [`Protocol.md`](Protocol.md): `ProtocolExecutor` → `RespProtocolHandler::TryParse` → `ReadCompleted(consumed)`.  
 Do not call `GetDataUntilCRLF`.
 
 ---

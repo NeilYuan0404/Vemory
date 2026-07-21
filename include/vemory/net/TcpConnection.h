@@ -3,9 +3,9 @@
 #include <functional>
 #include <memory>
 
+#include "vemory/net/EventLoop.h"
 #include "vemory/net/MessageBuffer.h"
 
-class EventLoop;
 // TCP connection
 class TcpConn : public std::enable_shared_from_this<TcpConn> {
  public:
@@ -24,10 +24,6 @@ class TcpConn : public std::enable_shared_from_this<TcpConn> {
   // Unconsumed read buffer for protocol parsers (RESP path).
   MessageBuffer& InputBuffer() { return input_buffer_; }
 
-  std::string GetAllData();
-
-  std::string GetDataUntilCrLf();
-
   int Send(const char* data, size_t size);
 
  private:
@@ -35,7 +31,7 @@ class TcpConn : public std::enable_shared_from_this<TcpConn> {
   void Close();
 
  private:
-  void HandleIO(uint32_t events);
+  void HandleIO(IoEvents events);
 
   void HandleRead();
 
@@ -50,5 +46,5 @@ class TcpConn : public std::enable_shared_from_this<TcpConn> {
   std::string output_buffer_;
   MessageBuffer input_buffer_;
   ReadCallback read_cb_;
-  std::function<void(uint32_t)> io_handler_;
+  IoHandler io_handler_;
 };

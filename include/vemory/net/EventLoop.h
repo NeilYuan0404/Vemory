@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -13,6 +14,10 @@
 #include "vemory/util/Timer.h"
 
 inline constexpr int kMaxEvents = 1024;
+
+// epoll event mask (EPOLLIN / EPOLLOUT / …) and userdata callback type.
+using IoEvents = uint32_t;
+using IoHandler = std::function<void(IoEvents)>;
 
 class EventLoop {
  public:
@@ -25,7 +30,7 @@ class EventLoop {
 
   ~EventLoop() { close(epfd_); }
 
-  void AddEvent(int fd, uint32_t events, void* ptr) {
+  void AddEvent(int fd, IoEvents events, void* ptr) {
     epoll_event ev;
     ev.events = events;
     ev.data.ptr = ptr;
@@ -34,7 +39,7 @@ class EventLoop {
     }
   }
 
-  void ModEvent(int fd, uint32_t events, void* ptr) {
+  void ModEvent(int fd, IoEvents events, void* ptr) {
     epoll_event ev;
     ev.events = events;
     ev.data.ptr = ptr;
@@ -63,8 +68,7 @@ class EventLoop {
       }
 
       for (int i = 0; i < nfds; ++i) {
-        auto* handler =
-            static_cast<std::function<void(uint32_t)>*>(events[i].data.ptr);
+        auto* handler = static_cast<IoHandler*>(events[i].data.ptr);
         (*handler)(events[i].events);
       }
       Timer::GetInstance()->HandleTimeout();

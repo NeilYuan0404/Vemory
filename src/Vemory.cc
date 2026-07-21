@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
         });
 
     conn->SetReadCallback([conn, executor]() {
-      executor->OnReadable(conn->Fd(), conn->InputBuffer());
+      executor->OnBufferReadable(conn->Fd(), conn->InputBuffer());
     });
   });
 

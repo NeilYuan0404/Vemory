@@ -6,8 +6,9 @@
 #include <string>
 #include <unordered_map>
 
+#include "vemory/net/EventLoop.h"
+
 class TcpConn;
-class EventLoop;
 
 class TcpServer {
  public:
@@ -25,6 +26,6 @@ class TcpServer {
   EventLoop& evloop_;
   int listen_fd_;
   NewConnCallback new_conn_cb_;
-  std::function<void(uint32_t)> accept_handler_;
+  IoHandler accept_handler_;
   std::unordered_map<int, std::shared_ptr<TcpConn>> connections_;
 };

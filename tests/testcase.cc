@@ -37,7 +37,7 @@ int main() {
         });
 
     conn->SetReadCallback([conn, executor]() {
-      executor->OnReadable(conn->Fd(), conn->InputBuffer());
+      executor->OnBufferReadable(conn->Fd(), conn->InputBuffer());
     });
   });
 

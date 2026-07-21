@@ -82,7 +82,7 @@ TEST(ProtocolExecutor, StickyPackets_TwoCommands) {
       "*2\r\n$4\r\nVDIM\r\n$4\r\ndocs\r\n";
   ASSERT_TRUE(Feed(buf, frames));
 
-  exec.OnReadable(3, buf);
+  exec.OnBufferReadable(3, buf);
   ASSERT_EQ(seen.size(), 2u);
   EXPECT_EQ(seen[0].cmd, CommandType::kVcard);
   EXPECT_EQ(seen[0].key, "docs");

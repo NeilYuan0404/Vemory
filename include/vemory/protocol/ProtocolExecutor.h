@@ -10,7 +10,7 @@
 #include "vemory/protocol/resp/RespProtocolHandler.h"
 
 // Sticky-packet parse loop: repeatedly TryParse until NeedMore / Error.
-// Replies from one OnReadable round are appended, then flushed once (pipeline batch).
+// Replies from one OnBufferReadable round are appended, then flushed once (pipeline batch).
 class ProtocolExecutor {
  public:
   // Fill *reply for this command (may leave empty).
@@ -27,7 +27,7 @@ class ProtocolExecutor {
                    ErrorCallback on_error = nullptr);
 
   // Drain complete frames from buf. Must run on the I/O thread.
-  void OnReadable(int client_fd, MessageBuffer& buf);
+  void OnBufferReadable(int client_fd, MessageBuffer& buf);
 
  private:
   std::shared_ptr<RespProtocolHandler> handler_;

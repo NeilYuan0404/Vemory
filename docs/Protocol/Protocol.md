@@ -16,9 +16,9 @@ I/O: [`../Network/Reactor.md`](../Network/Reactor.md); buffer: [`../Network/Mess
 
 ```
 TcpConn::ReadCallback
-  → ProtocolExecutor::OnReadable(fd, InputBuffer)
+  → ProtocolExecutor::OnBufferReadable(fd, InputBuffer)
     → loop until NeedMore / Error:
-         RespProtocolHandler::TryParse  // RespHandler → tokens → FromArgv
+         RespProtocolHandler::TryParse  // DecodeArrayOfBulk → FromArgv
          MessageBuffer::ReadCompleted(consumed)
          DispatchCallback(RequestContext, reply) → append reply to batch
               → CommandHandler → HandlerRegister[cmd]
@@ -56,14 +56,14 @@ RESP-only parse path used by the network layer.
 |-----|-----------|-------|
 | `TryParse` | `Status TryParse(int client_fd, MessageBuffer& buf, RequestContext* out, size_t* consumed)` | `kOk` / `kNeedMore` / `kError`. On `kOk`, `*out` owns strings |
 
-`RespHandler::TryParse` → `RequestContext::FromArgv`.
+`GetAllData` → `RespDecode::DecodeArrayOfBulk` → `RequestContext::FromArgv`.
 
 ### ProtocolExecutor
 
 | API | Signature | Notes |
 |-----|-----------|-------|
 | Constructor | `(shared_ptr<RespProtocolHandler>, DispatchCallback, WriteCallback, ErrorCallback)` | |
-| `OnReadable` | `(int client_fd, MessageBuffer& buf)` | Loop until `kNeedMore` / `kError`; append each reply, then **one** `WriteCallback` per round |
+| `OnBufferReadable` | `(int client_fd, MessageBuffer& buf)` | Loop until `kNeedMore` / `kError`; append each reply, then **one** `WriteCallback` per round |
 
 ---
 
@@ -72,7 +72,7 @@ RESP-only parse path used by the network layer.
 | | Line protocol | RESP (this layer) |
 |--|---------------|-------------------|
 | Frame shape | Single line, ends at `\r\n` | Multi-line: `*<n>\r\n` + several `$<len>\r\n<body>\r\n` |
-| Buffer read | `MessageBuffer::GetDataUntilCRLF` | `GetAllData` (via `RespHandler` / `RespProtocolHandler`) |
+| Buffer read | `MessageBuffer::GetDataUntilCRLF` | `GetAllData` (via `RespProtocolHandler`) |
 | Who decides "frame complete" | First `\r\n` found | `RespDecode` (`kOk` / `kNeedMore`) |
 | Consume | `ReadCompleted(line_len + 2)` | `ReadCompleted(consumed)` via `ProtocolExecutor` |
 | Use | Simple text / debugging | **Vemory command channel (only supported path)** |
@@ -81,7 +81,7 @@ RESP-only parse path used by the network layer.
 
 ## Argument Representation: `std::string_view`
 
-`tokens[i]` from `RespDecode` / `RespHandler` points into the read buffer bulk body and is **not copied**.
+`tokens[i]` from `RespDecode` points into the read buffer bulk body and is **not copied**.
 
 Constraints:
 
@@ -90,14 +90,14 @@ Constraints:
 
 ---
 
-## RespDecode / RespEncode / RespHandler
+## RespDecode / RespEncode / RespProtocolHandler
 
-Wire codec only. Headers under `include/vemory/protocol/resp/`.
+Wire codec + buffer glue. Headers under `include/vemory/protocol/resp/`.
 
 | API | Notes |
 |-----|-------|
 | `RespDecode::DecodeArrayOfBulk` | Zero-copy `vector<string_view>` + `consumed` |
-| `RespHandler::TryParse` | `GetAllData` → `DecodeArrayOfBulk` |
+| `RespProtocolHandler::TryParse` | `GetAllData` → decode → `FromArgv` → owned `RequestContext` |
 | `RespEncode::*` | Append reply frames to `string` |
 
 ---
@@ -143,7 +143,6 @@ This layer stops at an owned `RequestContext`. Vector set ops: [EmbedIndex](../I
 | RespProtocolHandler | `include/vemory/protocol/resp/RespProtocolHandler.h` | `src/protocol/resp/RespProtocolHandler.cc` |
 | RespDecode | `include/vemory/protocol/resp/RespDecode.h` | `src/protocol/resp/RespDecode.cc` |
 | RespEncode | `include/vemory/protocol/resp/RespEncode.h` | `src/protocol/resp/RespEncode.cc` |
-| RespHandler | `include/vemory/protocol/resp/RespHandler.h` | `src/protocol/resp/RespHandler.cc` |
 | CommandType | `include/vemory/protocol/CommandType.h` | `src/protocol/CommandType.cc` |
 | RequestContext | `include/vemory/protocol/RequestContext.h` | `src/protocol/RequestContext.cc` |
 | HandlerRegister | `include/vemory/protocol/HandlerRegister.h` | `src/protocol/HandlerRegister.cc` |

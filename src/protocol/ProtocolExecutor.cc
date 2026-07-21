@@ -11,7 +11,7 @@ ProtocolExecutor::ProtocolExecutor(std::shared_ptr<RespProtocolHandler> handler,
       on_write_(std::move(on_write)),
       on_error_(std::move(on_error)) {}
 
-void ProtocolExecutor::OnReadable(int client_fd, MessageBuffer& buf) {
+void ProtocolExecutor::OnBufferReadable(int client_fd, MessageBuffer& buf) {
   if (!handler_ || !on_ok_) {
     return;
   }

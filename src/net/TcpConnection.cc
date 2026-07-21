@@ -13,7 +13,7 @@
 TcpConn::TcpConn(int fd, EventLoop& evloop)
     : fd_(fd), evloop_(evloop), closed_(false) {
   SetNonBlocking(fd_);
-  io_handler_ = [this](uint32_t events) { HandleIO(events); };
+  io_handler_ = [this](IoEvents events) { HandleIO(events); };
   evloop_.AddEvent(fd_, EPOLLIN | EPOLLRDHUP | EPOLLET, &io_handler_);
 }
 
@@ -45,7 +45,7 @@ int TcpConn::Send(const char* data, size_t size) {
   return n;
 }
 
-void TcpConn::HandleIO(uint32_t events) {
+void TcpConn::HandleIO(IoEvents events) {
   if (closed_) return;
 
   if (events & EPOLLIN) HandleRead();
@@ -118,24 +118,4 @@ void TcpConn::SetNonBlocking(int fd) {
   if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
     spdlog::error("fcntl set error: {}", errno);
   }
-}
-
-std::string TcpConn::GetDataUntilCrLf() {
-  auto data = input_buffer_.GetDataUntilCRLF();
-  if (data.first != nullptr) {
-    std::string result(data.first, data.second);
-    input_buffer_.ReadCompleted(data.second + 2);  // consume \r\n
-    return result;
-  }
-  return "";
-}
-
-std::string TcpConn::GetAllData() {
-  auto data = input_buffer_.GetAllData();
-  if (data.first != nullptr) {
-    std::string result(data.first, data.second);
-    input_buffer_.ReadCompleted(data.second);
-    return result;
-  }
-  return "";
 }

@@ -3,7 +3,7 @@
 #include <string_view>
 #include <vector>
 
-#include "vemory/protocol/resp/RespHandler.h"
+#include "vemory/protocol/resp/RespDecode.h"
 
 RespProtocolHandler::Status RespProtocolHandler::TryParse(
     int client_fd, MessageBuffer& buf, RequestContext* out, size_t* consumed) {
@@ -11,12 +11,18 @@ RespProtocolHandler::Status RespProtocolHandler::TryParse(
     return Status::kError;
   }
 
-  std::vector<std::string_view> tokens;
-  const auto wire = RespHandler::TryParse(buf, &tokens, consumed);
-  if (wire == RespHandler::Status::kNeedMore) {
+  auto all = buf.GetAllData();
+  if (all.first == nullptr || all.second == 0) {
     return Status::kNeedMore;
   }
-  if (wire == RespHandler::Status::kError) {
+
+  std::vector<std::string_view> tokens;
+  const auto wire =
+      RespDecode::DecodeArrayOfBulk(all.first, all.second, &tokens, consumed);
+  if (wire == RespDecode::Status::kNeedMore) {
+    return Status::kNeedMore;
+  }
+  if (wire == RespDecode::Status::kError) {
     return Status::kError;
   }
 

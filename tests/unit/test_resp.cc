@@ -8,9 +8,11 @@
 #include <vector>
 
 #include "vemory/net/MessageBuffer.h"
+#include "vemory/protocol/CommandType.h"
+#include "vemory/protocol/RequestContext.h"
 #include "vemory/protocol/resp/RespDecode.h"
 #include "vemory/protocol/resp/RespEncode.h"
-#include "vemory/protocol/resp/RespHandler.h"
+#include "vemory/protocol/resp/RespProtocolHandler.h"
 
 namespace {
 
@@ -82,18 +84,19 @@ TEST(RespDecode, ArrayOfBulk_Malformed) {
   EXPECT_EQ(st, RespDecode::Status::kError);
 }
 
-TEST(RespHandler, TryParseFromMessageBuffer) {
+TEST(RespProtocolHandler, TryParseFromMessageBuffer) {
   MessageBuffer buf;
-  const char* frame = "*2\r\n$4\r\nVDEL\r\n$3\r\nkey\r\n";
+  const char* frame = "*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n";
   ASSERT_TRUE(FeedViaSocket(buf, frame, std::strlen(frame)));
 
-  std::vector<std::string_view> tokens;
+  RespProtocolHandler handler;
+  RequestContext ctx;
   size_t consumed = 0;
-  auto st = RespHandler::TryParse(buf, &tokens, &consumed);
-  ASSERT_EQ(st, RespHandler::Status::kOk);
-  ASSERT_EQ(tokens.size(), 2u);
-  EXPECT_EQ(tokens[0], "VDEL");
-  EXPECT_EQ(tokens[1], "key");
+  auto st = handler.TryParse(1, buf, &ctx, &consumed);
+  ASSERT_EQ(st, RespProtocolHandler::Status::kOk);
+  EXPECT_EQ(consumed, std::strlen(frame));
+  EXPECT_EQ(ctx.cmd, CommandType::kGet);
+  EXPECT_EQ(ctx.key, "key");
 
   buf.ReadCompleted(consumed);
   EXPECT_TRUE(buf.Empty());

@@ -6,7 +6,7 @@
 #include "vemory/net/MessageBuffer.h"
 #include "vemory/protocol/RequestContext.h"
 
-// RESP parse: MessageBuffer → tokens → RequestContext (via FromArgv).
+// RESP parse: MessageBuffer → DecodeArrayOfBulk → RequestContext (via FromArgv).
 class RespProtocolHandler {
  public:
   enum class Status : uint8_t {

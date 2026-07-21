@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-#include "vemory/protocol/VNode.h"
+#include "vemory/storage/VNode.h"
 
 // Protobuf codec for VNode ↔ bytes (replication / future persist).
 // Not used by VNodeStorage Put/Get.

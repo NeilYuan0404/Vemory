@@ -1,4 +1,4 @@
-#include "vemory/protocol/HandlerRegister.h"
+#include "vemory/protocol/dispatcher/HandlerRegister.h"
 
 #include "vemory/protocol/resp/RespEncode.h"
 

@@ -1,8 +1,8 @@
-#include "vemory/protocol/CommandHandler.h"
+#include "vemory/protocol/dispatcher/CommandHandler.h"
 
-#include "vemory/protocol/AssistDispatcher.h"
-#include "vemory/protocol/KvsDispatcher.h"
-#include "vemory/protocol/VectorDispatcher.h"
+#include "vemory/protocol/dispatcher/AssistDispatcher.h"
+#include "vemory/protocol/dispatcher/KvsDispatcher.h"
+#include "vemory/protocol/dispatcher/VectorDispatcher.h"
 
 CommandHandler::CommandHandler(VectorSetRegistry* registry, KvStore* kv)
     : registry_(registry), kv_(kv) {

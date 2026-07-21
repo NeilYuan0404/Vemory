@@ -3,7 +3,7 @@
 #include <string>
 
 #include "vemory/index/VectorSetRegistry.h"
-#include "vemory/protocol/HandlerRegister.h"
+#include "vemory/protocol/dispatcher/HandlerRegister.h"
 #include "vemory/protocol/RequestContext.h"
 #include "vemory/storage/KvStore.h"
 

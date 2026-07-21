@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 
 #include "vemory/index/VectorSetRegistry.h"
-#include "vemory/protocol/CommandHandler.h"
+#include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/RequestContext.h"
-#include "vemory/protocol/VNode.h"
 #include "vemory/storage/KvStore.h"
 #include "vemory/storage/ProtobufVNodeCodec.h"
+#include "vemory/storage/VNode.h"
 #include "vemory/storage/VNodeStorage.h"
 
 TEST(ProtobufVNodeCodec, EncodeDecodeRoundTrip) {

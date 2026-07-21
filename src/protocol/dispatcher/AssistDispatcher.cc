@@ -1,4 +1,4 @@
-#include "vemory/protocol/AssistDispatcher.h"
+#include "vemory/protocol/dispatcher/AssistDispatcher.h"
 
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/resp/RespEncode.h"

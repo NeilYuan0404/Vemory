@@ -1,4 +1,4 @@
-#include "vemory/protocol/KvsDispatcher.h"
+#include "vemory/protocol/dispatcher/KvsDispatcher.h"
 
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/resp/RespEncode.h"

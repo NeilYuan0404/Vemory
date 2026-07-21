@@ -11,7 +11,7 @@
 #include "vemory/net/EventLoop.h"
 #include "vemory/net/TcpConnection.h"
 #include "vemory/net/TcpServer.h"
-#include "vemory/protocol/CommandHandler.h"
+#include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/protocol/ProtocolExecutor.h"
 #include "vemory/protocol/resp/RespProtocolHandler.h"
 #include "vemory/storage/KvStore.h"

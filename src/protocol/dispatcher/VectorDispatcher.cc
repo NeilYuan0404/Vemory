@@ -1,4 +1,4 @@
-#include "vemory/protocol/VectorDispatcher.h"
+#include "vemory/protocol/dispatcher/VectorDispatcher.h"
 
 #include <cstdio>
 #include <string_view>

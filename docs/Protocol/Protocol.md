@@ -145,8 +145,8 @@ This layer stops at an owned `RequestContext`. Vector set ops: [EmbedIndex](../I
 | RespEncode | `include/vemory/protocol/resp/RespEncode.h` | `src/protocol/resp/RespEncode.cc` |
 | CommandType | `include/vemory/protocol/CommandType.h` | `src/protocol/CommandType.cc` |
 | RequestContext | `include/vemory/protocol/RequestContext.h` | `src/protocol/RequestContext.cc` |
-| HandlerRegister | `include/vemory/protocol/HandlerRegister.h` | `src/protocol/HandlerRegister.cc` |
-| VectorDispatcher | `include/vemory/protocol/VectorDispatcher.h` | `src/protocol/VectorDispatcher.cc` |
-| KvsDispatcher | `include/vemory/protocol/KvsDispatcher.h` | `src/protocol/KvsDispatcher.cc` |
-| AssistDispatcher | `include/vemory/protocol/AssistDispatcher.h` | `src/protocol/AssistDispatcher.cc` |
-| CommandHandler | `include/vemory/protocol/CommandHandler.h` | `src/protocol/CommandHandler.cc` |
+| HandlerRegister | `include/vemory/protocol/dispatcher/HandlerRegister.h` | `src/protocol/dispatcher/HandlerRegister.cc` |
+| VectorDispatcher | `include/vemory/protocol/dispatcher/VectorDispatcher.h` | `src/protocol/dispatcher/VectorDispatcher.cc` |
+| KvsDispatcher | `include/vemory/protocol/dispatcher/KvsDispatcher.h` | `src/protocol/dispatcher/KvsDispatcher.cc` |
+| AssistDispatcher | `include/vemory/protocol/dispatcher/AssistDispatcher.h` | `src/protocol/dispatcher/AssistDispatcher.cc` |
+| CommandHandler | `include/vemory/protocol/dispatcher/CommandHandler.h` | `src/protocol/dispatcher/CommandHandler.cc` |

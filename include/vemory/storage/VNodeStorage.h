@@ -5,7 +5,7 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "vemory/protocol/VNode.h"
+#include "vemory/storage/VNode.h"
 
 // In-memory store: key = assigned uint16 id, value = owned VNode.
 // Also indexes prompt → id for lookup / delete.

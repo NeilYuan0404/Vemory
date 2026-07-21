@@ -55,7 +55,7 @@ Uses `vemory.VNodePb` (`proto/VNode.proto`): `id`, `prompt`, `answer` (no embed)
 | KvStore | `include/vemory/storage/KvStore.h` | `src/storage/KvStore.cc` |
 | ProtobufVNodeCodec | `include/vemory/storage/ProtobufVNodeCodec.h` | `src/storage/ProtobufVNodeCodec.cc` |
 | VNode.proto | `proto/VNode.proto` | `generated/VNode.pb.{h,cc}` |
-| VNode | `include/vemory/protocol/VNode.h` | (header-only) |
+| VNode | `include/vemory/storage/VNode.h` | (header-only) |
 | VNodeStorage | `include/vemory/storage/VNodeStorage.h` | `src/storage/VNodeStorage.cc` |
 
 ---

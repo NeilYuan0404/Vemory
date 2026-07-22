@@ -47,9 +47,9 @@ Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 ```bash
 ./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
 ./bench/smoke/pipeline.sh  # c=1 pipeline smoke (Vemory only)
-./bench/smoke/vector.sh    # VADD warm-up + VSIM
+./bench/smoke/vector.sh    # VSET load + VGET + VDEL spot-check (redis-py)
 python3 bench/pipeline_bench.py                  # c=1 SET/GET: Vemory vs Redis
-bench/.venv/bin/python bench/vector_metrics.py   # Recall@10 / p50·p99 / QPS@recall≥0.95 (see bench/README.md)
+bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95 (see bench/README.md)
 ```
 
 ### Latest pipeline result
@@ -99,9 +99,7 @@ Wire format is Redis RESP (bulk strings are binary-safe). Semantic cache verbs:
 
 `vector_blob` / query blob: raw little-endian `float32` bytes. `threshold` is a cosine **distance** upper bound (hit if best distance ≤ threshold). Also: `SET`/`GET`/`DEL`, `PING`/`ECHO`.
 
-Binary blobs are awkward in interactive `redis-cli`; prefer a RESP client library or unit tests for cache commands. String KVS still works with `redis-cli`.
-
-Note: `bench/smoke/vector.sh` / `vector_metrics.py` still target the removed Vector Set verbs and will be updated in a follow-up commit.
+Binary blobs are awkward in interactive `redis-cli`; prefer a RESP client library, benches (`bench/smoke/vector.sh`, `vector_metrics.py`), or unit tests for cache commands. String KVS still works with `redis-cli`.
 
 ## Architecture
 

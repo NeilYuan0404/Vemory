@@ -13,9 +13,11 @@ All notable changes to Vemory are documented in this file.
 - `VNodeIndex` orchestrating `VNodeStorage` + `USearchEmbedIndex`
 - `VNode` fields: `user_key`, `question`, `answer` (id reused on same `user_key`)
 
+### Changed
+- Benches retargeted to binary `VSET` / `VGET` / `VDEL` (`bench/vemory_vec.py`, smoke + `vector_metrics.py` agree gate)
+
 ### Notes
 - `VGET` threshold is cosine **distance** (not similarity)
-- Bench scripts under `bench/smoke/vector.sh` and `vector_metrics.py` still call removed verbs; update in a follow-up commit
 
 ## [0.1.1] — 2026-07-22
 

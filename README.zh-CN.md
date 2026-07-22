@@ -4,7 +4,7 @@
 
 兼容 RESP 的向量集合（Vector Set）服务端（Redis Vector Set 风格子集）。可用 `redis-cli` 连接。
 
-**v0.1.0 — 早期 MVP。** 数据**仅存内存**（重启即丢失）。单线程 epoll 反应器。命令集是 Redis Vector Set 的**子集**，另含基础 `SET`/`GET`/`DEL` —— 并非 Redis 的完整替代品。
+**v0.1.1 — 早期 MVP。** 数据**仅存内存**（重启即丢失）。单线程 epoll 反应器。命令集是 Redis Vector Set 的**子集**，另含基础 `SET`/`GET`/`DEL` —— 并非 Redis 的完整替代品。网络 / RESP 解析路径已针对 pipeline 场景加固；详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 

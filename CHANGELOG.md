@@ -2,6 +2,23 @@
 
 All notable changes to Vemory are documented in this file.
 
+## [0.1.1] — 2026-07-22
+
+Protocol / network path hardening and layout cleanup after pipeline smoke benches.
+
+### Changed
+- Merged `RespHandler` into `RespProtocolHandler` (single RESP parse entry)
+- Moved command dispatch under `protocol/dispatcher/`; moved `VNode` to `storage/`
+- Clarified reactor / protocol docs for the sticky-packet + pipeline batch write path
+
+### Added
+- Bench: `bench/smoke/` scripts, `pipeline_bench.py` (Vemory vs Redis), `vector_metrics.py` (Recall@10 / latency / gated QPS)
+- Bilingual README (`README.zh-CN.md`)
+
+### Limits
+- Same as 0.1.0 (no persistence, no auth, `uint16` element ids, partial Vector Set API)
+- `VNode` / `VNodeStorage` / `ProtobufVNodeCodec` remain unwired to live commands
+
 ## [0.1.0] — 2026-07-19
 
 First public MVP tag.

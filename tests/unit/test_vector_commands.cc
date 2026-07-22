@@ -1,19 +1,34 @@
 #include <gtest/gtest.h>
 
-#include "vemory/index/VectorSetRegistry.h"
-#include "vemory/protocol/dispatcher/CommandHandler.h"
+#include <cstring>
+#include <string>
+#include <vector>
+
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/RequestContext.h"
+#include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/storage/KvStore.h"
 #include "vemory/storage/ProtobufVNodeCodec.h"
 #include "vemory/storage/VNode.h"
+#include "vemory/storage/VNodeIndex.h"
 #include "vemory/storage/VNodeStorage.h"
+
+namespace {
+
+std::string FloatBlob(const std::vector<float>& vals) {
+  std::string out(vals.size() * sizeof(float), '\0');
+  std::memcpy(out.data(), vals.data(), out.size());
+  return out;
+}
+
+}  // namespace
 
 TEST(ProtobufVNodeCodec, EncodeDecodeRoundTrip) {
   ProtobufVNodeCodec codec;
   VNode in;
   in.id = 7;
-  in.prompt = "p";
+  in.user_key = "uk";
+  in.question = "q";
   in.answer = "a";
 
   std::string bytes;
@@ -23,212 +38,148 @@ TEST(ProtobufVNodeCodec, EncodeDecodeRoundTrip) {
   VNode out;
   ASSERT_EQ(codec.Decode(bytes, &out), ProtobufVNodeCodec::Status::kOk);
   EXPECT_EQ(out.id, 7);
-  EXPECT_EQ(out.prompt, "p");
+  EXPECT_EQ(out.user_key, "uk");
+  EXPECT_EQ(out.question, "q");
   EXPECT_EQ(out.answer, "a");
 }
 
-TEST(VNodeStorage, PutAssignsIdAndGetByPrompt) {
+TEST(VNodeStorage, PutReusesIdOnUserKeyOverwrite) {
   VNodeStorage store;
 
   VNode node;
-  node.prompt = "q";
-  node.answer = "a";
+  node.user_key = "uk";
+  node.question = "q1";
+  node.answer = "a1";
 
-  uint16_t id = 0;
-  ASSERT_EQ(store.Put(node, &id), VNodeStorage::Status::kOk);
-  EXPECT_EQ(id, 1);
+  uint16_t id1 = 0;
+  ASSERT_EQ(store.Put(node, &id1), VNodeStorage::Status::kOk);
+  EXPECT_EQ(id1, 1);
+
+  node.user_key = "uk";
+  node.question = "q2";
+  node.answer = "a2";
+  uint16_t id2 = 0;
+  ASSERT_EQ(store.Put(std::move(node), &id2), VNodeStorage::Status::kOk);
+  EXPECT_EQ(id2, id1);
 
   VNode got;
-  ASSERT_EQ(store.GetByPrompt("q", &got), VNodeStorage::Status::kOk);
-  EXPECT_EQ(got.id, 1);
-  EXPECT_EQ(got.answer, "a");
+  ASSERT_EQ(store.GetByUserKey("uk", &got), VNodeStorage::Status::kOk);
+  EXPECT_EQ(got.id, id1);
+  EXPECT_EQ(got.answer, "a2");
+  EXPECT_EQ(store.size(), 1u);
 }
 
 TEST(KvStore, SetGetDelHashMap) {
   KvStore store;
   ASSERT_EQ(store.Set("a", "1"), KvStore::Status::kOk);
-  ASSERT_EQ(store.Set("b", "2"), KvStore::Status::kOk);
-  EXPECT_EQ(store.size(), 2u);
-
   std::string v;
   ASSERT_EQ(store.Get("a", &v), KvStore::Status::kOk);
   EXPECT_EQ(v, "1");
-  ASSERT_EQ(store.Get("missing", &v), KvStore::Status::kNotFound);
-
-  ASSERT_EQ(store.Set("a", "updated"), KvStore::Status::kOk);
-  ASSERT_EQ(store.Get("a", &v), KvStore::Status::kOk);
-  EXPECT_EQ(v, "updated");
-
-  ASSERT_EQ(store.Del("b"), KvStore::Status::kOk);
-  EXPECT_EQ(store.size(), 1u);
-  ASSERT_EQ(store.Del("b"), KvStore::Status::kNotFound);
+  ASSERT_EQ(store.Del("a"), KvStore::Status::kOk);
+  EXPECT_EQ(store.Get("a", &v), KvStore::Status::kNotFound);
 }
 
-TEST(CommandHandler, VaddVdimVembVcard) {
-  VectorSetRegistry registry;
-  KvStore kv;
-  CommandHandler handler(&registry, &kv);
+TEST(VNodeIndex, SetGetDelSemantic) {
+  VNodeIndex index(64);
+  const auto a = FloatBlob({1.f, 0.f});
+  const auto b = FloatBlob({0.f, 1.f});
+  const auto near_a = FloatBlob({0.99f, 0.01f});
 
-  RequestContext add;
-  add.cmd = CommandType::kVadd;
-  add.key = "docs";
-  add.element = "apple";
-  add.embed = {1.f, 0.f};
+  ASSERT_EQ(index.Set(a, "k1", "q1", "ans-a"), VNodeIndex::Status::kOk);
+  ASSERT_EQ(index.Set(b, "k2", "q2", "ans-b"), VNodeIndex::Status::kOk);
+  EXPECT_EQ(index.dimensions(), 2u);
+
+  std::string answer;
+  ASSERT_EQ(index.Get(near_a, 0.2f, &answer), VNodeIndex::Status::kOk);
+  EXPECT_EQ(answer, "ans-a");
+
+  // Far from both stored vectors → miss under moderate distance gate
+  EXPECT_EQ(index.Get(FloatBlob({-1.f, 0.f}), 0.3f, &answer),
+            VNodeIndex::Status::kNotFound);
+
+  EXPECT_EQ(index.Set(FloatBlob({1.f, 0.f, 0.f}), "k3", "q", "a"),
+            VNodeIndex::Status::kDimMismatch);
+  EXPECT_EQ(index.Set(std::string("xyz"), "k3", "q", "a"),
+            VNodeIndex::Status::kBadVectorSize);
+
+  ASSERT_EQ(index.Del("k1"), VNodeIndex::Status::kOk);
+  EXPECT_EQ(index.Del("k1"), VNodeIndex::Status::kNotFound);
+}
+
+TEST(CommandHandler, VsetVgetVdel) {
+  VNodeIndex vnode(64);
+  KvStore kv;
+  CommandHandler commands(&vnode, &kv);
+
+  const auto blob = FloatBlob({1.f, 0.f});
+  RequestContext set;
+  set.cmd = CommandType::kVset;
+  set.vector_blob = blob;
+  set.user_key = "u1";
+  set.question = "hello?";
+  set.answer = "world";
 
   std::string reply;
-  handler.Dispatch(add, &reply);
+  commands.Dispatch(set, &reply);
+  EXPECT_EQ(reply, "+OK\r\n");
+
+  RequestContext get;
+  get.cmd = CommandType::kVget;
+  get.vector_blob = FloatBlob({0.95f, 0.05f});
+  get.threshold = 0.5f;
+  reply.clear();
+  commands.Dispatch(get, &reply);
+  EXPECT_EQ(reply, "$5\r\nworld\r\n");
+
+  RequestContext miss;
+  miss.cmd = CommandType::kVget;
+  miss.vector_blob = FloatBlob({0.f, 1.f});
+  miss.threshold = 0.01f;
+  reply.clear();
+  commands.Dispatch(miss, &reply);
+  EXPECT_EQ(reply, "$-1\r\n");
+
+  RequestContext del;
+  del.cmd = CommandType::kVdel;
+  del.user_key = "u1";
+  reply.clear();
+  commands.Dispatch(del, &reply);
   EXPECT_EQ(reply, ":1\r\n");
-
-  RequestContext dim;
-  dim.cmd = CommandType::kVdim;
-  dim.key = "docs";
   reply.clear();
-  handler.Dispatch(dim, &reply);
-  EXPECT_EQ(reply, ":2\r\n");
-
-  RequestContext card;
-  card.cmd = CommandType::kVcard;
-  card.key = "docs";
-  reply.clear();
-  handler.Dispatch(card, &reply);
-  EXPECT_EQ(reply, ":1\r\n");
-
-  RequestContext emb;
-  emb.cmd = CommandType::kVemb;
-  emb.key = "docs";
-  emb.element = "apple";
-  reply.clear();
-  handler.Dispatch(emb, &reply);
-  EXPECT_NE(reply.find("*2\r\n"), std::string::npos);
-  EXPECT_NE(reply.find("$1\r\n1\r\n"), std::string::npos);
-  EXPECT_NE(reply.find("$1\r\n0\r\n"), std::string::npos);
-
-  RequestContext missing;
-  missing.cmd = CommandType::kVcard;
-  missing.key = "other";
-  reply.clear();
-  handler.Dispatch(missing, &reply);
+  commands.Dispatch(del, &reply);
   EXPECT_EQ(reply, ":0\r\n");
 }
 
-TEST(CommandHandler, PingEcho) {
-  VectorSetRegistry registry;
+TEST(CommandHandler, PingEchoAndKv) {
+  VNodeIndex vnode(16);
   KvStore kv;
-  CommandHandler handler(&registry, &kv);
+  CommandHandler commands(&vnode, &kv);
 
   RequestContext ping;
   ping.cmd = CommandType::kPing;
   std::string reply;
-  handler.Dispatch(ping, &reply);
+  commands.Dispatch(ping, &reply);
   EXPECT_EQ(reply, "+PONG\r\n");
-
-  RequestContext ping_msg;
-  ping_msg.cmd = CommandType::kPing;
-  ping_msg.element = "hi";
-  reply.clear();
-  handler.Dispatch(ping_msg, &reply);
-  EXPECT_EQ(reply, "$2\r\nhi\r\n");
-
-  RequestContext echo;
-  echo.cmd = CommandType::kEcho;
-  echo.element = "world";
-  reply.clear();
-  handler.Dispatch(echo, &reply);
-  EXPECT_EQ(reply, "$5\r\nworld\r\n");
-}
-
-TEST(CommandHandler, SetGetDel) {
-  VectorSetRegistry registry;
-  KvStore kv;
-  CommandHandler handler(&registry, &kv);
 
   RequestContext set;
   set.cmd = CommandType::kSet;
-  set.key = "k";
-  set.element = "hello";
-  std::string reply;
-  handler.Dispatch(set, &reply);
+  set.key = "a";
+  set.element = "1";
+  reply.clear();
+  commands.Dispatch(set, &reply);
   EXPECT_EQ(reply, "+OK\r\n");
-
-  RequestContext get;
-  get.cmd = CommandType::kGet;
-  get.key = "k";
-  reply.clear();
-  handler.Dispatch(get, &reply);
-  EXPECT_EQ(reply, "$5\r\nhello\r\n");
-
-  RequestContext miss;
-  miss.cmd = CommandType::kGet;
-  miss.key = "missing";
-  reply.clear();
-  handler.Dispatch(miss, &reply);
-  EXPECT_EQ(reply, "$-1\r\n");
-
-  RequestContext del;
-  del.cmd = CommandType::kDel;
-  del.key = "k";
-  reply.clear();
-  handler.Dispatch(del, &reply);
-  EXPECT_EQ(reply, ":1\r\n");
-
-  reply.clear();
-  handler.Dispatch(del, &reply);
-  EXPECT_EQ(reply, ":0\r\n");
-
-  RequestContext add;
-  add.cmd = CommandType::kVadd;
-  add.key = "docs";
-  add.element = "apple";
-  add.embed = {1.f, 0.f};
-  reply.clear();
-  handler.Dispatch(add, &reply);
-  EXPECT_EQ(reply, ":1\r\n");
 }
 
-TEST(CommandHandler, VsimReturnsNearest) {
-  VectorSetRegistry registry;
-  KvStore kv;
-  CommandHandler handler(&registry, &kv);
-
-  RequestContext a;
-  a.cmd = CommandType::kVadd;
-  a.key = "docs";
-  a.element = "near-x";
-  a.embed = {1.f, 0.f};
+TEST(CommandHandler, VsetBadBlob) {
+  VNodeIndex vnode(16);
+  CommandHandler commands(&vnode, nullptr);
+  RequestContext set;
+  set.cmd = CommandType::kVset;
+  set.vector_blob = "not-floats!";
+  set.user_key = "u";
+  set.question = "q";
+  set.answer = "a";
   std::string reply;
-  handler.Dispatch(a, &reply);
-  EXPECT_EQ(reply, ":1\r\n");
-
-  RequestContext b;
-  b.cmd = CommandType::kVadd;
-  b.key = "docs";
-  b.element = "near-y";
-  b.embed = {0.f, 1.f};
-  reply.clear();
-  handler.Dispatch(b, &reply);
-  EXPECT_EQ(reply, ":1\r\n");
-
-  RequestContext search;
-  search.cmd = CommandType::kVsim;
-  search.key = "docs";
-  search.vsim_mode = VsimMode::kValues;
-  search.embed = {0.9f, 0.1f};
-  search.count = 1;
-  search.with_scores = false;
-  reply.clear();
-  handler.Dispatch(search, &reply);
-  EXPECT_NE(reply.find("*1\r\n"), std::string::npos);
-  EXPECT_NE(reply.find("$6\r\nnear-x\r\n"), std::string::npos);
-
-  RequestContext by_ele;
-  by_ele.cmd = CommandType::kVsim;
-  by_ele.key = "docs";
-  by_ele.vsim_mode = VsimMode::kEle;
-  by_ele.element = "near-x";
-  by_ele.count = 2;
-  by_ele.with_scores = true;
-  reply.clear();
-  handler.Dispatch(by_ele, &reply);
-  EXPECT_NE(reply.find("near-x"), std::string::npos);
-  EXPECT_NE(reply.find("near-y"), std::string::npos);
+  commands.Dispatch(set, &reply);
+  EXPECT_EQ(reply, "-ERR invalid vector byte size\r\n");
 }

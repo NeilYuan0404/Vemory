@@ -1,8 +1,17 @@
 #include "vemory/storage/VNodeStorage.h"
 
 VNodeStorage::Status VNodeStorage::Put(VNode node, uint16_t* out_id) {
-  if (out_id == nullptr || node.prompt.empty()) {
+  if (out_id == nullptr || node.user_key.empty()) {
     return Status::kBadValue;
+  }
+
+  auto it = by_user_key_.find(node.user_key);
+  if (it != by_user_key_.end()) {
+    const uint16_t id = it->second;
+    node.id = id;
+    by_id_[id] = std::move(node);
+    *out_id = id;
+    return Status::kOk;
   }
 
   if (next_id_ == 0) {
@@ -10,14 +19,7 @@ VNodeStorage::Status VNodeStorage::Put(VNode node, uint16_t* out_id) {
   }
   const uint16_t id = next_id_++;
   node.id = id;
-
-  auto it = by_prompt_.find(node.prompt);
-  if (it != by_prompt_.end()) {
-    by_id_.erase(it->second);
-    it->second = id;
-  } else {
-    by_prompt_.emplace(node.prompt, id);
-  }
+  by_user_key_.emplace(node.user_key, id);
   by_id_[id] = std::move(node);
   *out_id = id;
   return Status::kOk;
@@ -35,24 +37,24 @@ VNodeStorage::Status VNodeStorage::GetById(uint16_t id, VNode* out) const {
   return Status::kOk;
 }
 
-VNodeStorage::Status VNodeStorage::GetByPrompt(std::string_view prompt,
-                                               VNode* out) const {
+VNodeStorage::Status VNodeStorage::GetByUserKey(std::string_view user_key,
+                                                VNode* out) const {
   if (out == nullptr) {
     return Status::kBadValue;
   }
-  auto it = by_prompt_.find(std::string(prompt));
-  if (it == by_prompt_.end()) {
+  auto it = by_user_key_.find(std::string(user_key));
+  if (it == by_user_key_.end()) {
     return Status::kNotFound;
   }
   return GetById(it->second, out);
 }
 
-VNodeStorage::Status VNodeStorage::DelByPrompt(std::string_view prompt) {
-  auto it = by_prompt_.find(std::string(prompt));
-  if (it == by_prompt_.end()) {
+VNodeStorage::Status VNodeStorage::DelByUserKey(std::string_view user_key) {
+  auto it = by_user_key_.find(std::string(user_key));
+  if (it == by_user_key_.end()) {
     return Status::kNotFound;
   }
   by_id_.erase(it->second);
-  by_prompt_.erase(it);
+  by_user_key_.erase(it);
   return Status::kOk;
 }

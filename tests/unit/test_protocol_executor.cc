@@ -35,10 +35,10 @@ bool Feed(MessageBuffer& buf, std::string_view data) {
 
 }  // namespace
 
-TEST(RespProtocolHandler, TryParse_Vcard) {
+TEST(RespProtocolHandler, TryParse_Vdel) {
   RespProtocolHandler handler;
   MessageBuffer buf;
-  const char* frame = "*2\r\n$5\r\nVCARD\r\n$4\r\ndocs\r\n";
+  const char* frame = "*2\r\n$4\r\nVDEL\r\n$3\r\nuk1\r\n";
   ASSERT_TRUE(Feed(buf, frame));
 
   RequestContext ctx;
@@ -47,14 +47,14 @@ TEST(RespProtocolHandler, TryParse_Vcard) {
   ASSERT_EQ(st, RespProtocolHandler::Status::kOk);
   EXPECT_EQ(consumed, std::strlen(frame));
   EXPECT_EQ(ctx.client_fd, 9);
-  EXPECT_EQ(ctx.cmd, CommandType::kVcard);
-  EXPECT_EQ(ctx.key, "docs");
+  EXPECT_EQ(ctx.cmd, CommandType::kVdel);
+  EXPECT_EQ(ctx.user_key, "uk1");
 }
 
 TEST(RespProtocolHandler, TryParse_NeedMore) {
   RespProtocolHandler handler;
   MessageBuffer buf;
-  ASSERT_TRUE(Feed(buf, "*2\r\n$5\r\nVCARD\r\n$3\r\nab"));
+  ASSERT_TRUE(Feed(buf, "*2\r\n$4\r\nVDEL\r\n$3\r\nab"));
 
   RequestContext ctx;
   size_t consumed = 0;
@@ -78,16 +78,16 @@ TEST(ProtocolExecutor, StickyPackets_TwoCommands) {
 
   MessageBuffer buf;
   const char* frames =
-      "*2\r\n$5\r\nVCARD\r\n$4\r\ndocs\r\n"
-      "*2\r\n$4\r\nVDIM\r\n$4\r\ndocs\r\n";
+      "*2\r\n$4\r\nVDEL\r\n$3\r\nuk1\r\n"
+      "*2\r\n$4\r\nVDEL\r\n$3\r\nuk2\r\n";
   ASSERT_TRUE(Feed(buf, frames));
 
   exec.OnBufferReadable(3, buf);
   ASSERT_EQ(seen.size(), 2u);
-  EXPECT_EQ(seen[0].cmd, CommandType::kVcard);
-  EXPECT_EQ(seen[0].key, "docs");
-  EXPECT_EQ(seen[1].cmd, CommandType::kVdim);
+  EXPECT_EQ(seen[0].cmd, CommandType::kVdel);
+  EXPECT_EQ(seen[0].user_key, "uk1");
+  EXPECT_EQ(seen[1].cmd, CommandType::kVdel);
+  EXPECT_EQ(seen[1].user_key, "uk2");
   EXPECT_TRUE(buf.Empty());
-  // One write for both replies in the pipelined round.
   EXPECT_EQ(flushed, "+OK\r\n+OK\r\n");
 }

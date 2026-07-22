@@ -2,18 +2,16 @@
 
 #include "vemory/protocol/dispatcher/AssistDispatcher.h"
 #include "vemory/protocol/dispatcher/KvsDispatcher.h"
-#include "vemory/protocol/dispatcher/VectorDispatcher.h"
+#include "vemory/protocol/dispatcher/VNodeDispatcher.h"
 
-CommandHandler::CommandHandler(VectorSetRegistry* registry, KvStore* kv)
-    : registry_(registry), kv_(kv) {
+CommandHandler::CommandHandler(VNodeIndex* vnode_index, KvStore* kv)
+    : vnode_index_(vnode_index), kv_(kv) {
   register_.Register(CommandType::kPing, AssistDispatcher, nullptr);
   register_.Register(CommandType::kEcho, AssistDispatcher, nullptr);
-  if (registry_ != nullptr) {
-    register_.Register(CommandType::kVadd, VectorDispatcher, registry_);
-    register_.Register(CommandType::kVsim, VectorDispatcher, registry_);
-    register_.Register(CommandType::kVdim, VectorDispatcher, registry_);
-    register_.Register(CommandType::kVemb, VectorDispatcher, registry_);
-    register_.Register(CommandType::kVcard, VectorDispatcher, registry_);
+  if (vnode_index_ != nullptr) {
+    register_.Register(CommandType::kVset, VNodeDispatcher, vnode_index_);
+    register_.Register(CommandType::kVget, VNodeDispatcher, vnode_index_);
+    register_.Register(CommandType::kVdel, VNodeDispatcher, vnode_index_);
   }
   if (kv_ != nullptr) {
     register_.Register(CommandType::kSet, KvsDispatcher, kv_);

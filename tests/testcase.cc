@@ -3,19 +3,19 @@
 #include <string>
 #include <string_view>
 
-#include "vemory/index/VectorSetRegistry.h"
 #include "vemory/net/EventLoop.h"
 #include "vemory/net/TcpConnection.h"
 #include "vemory/net/TcpServer.h"
 #include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/protocol/ProtocolExecutor.h"
 #include "vemory/protocol/resp/RespProtocolHandler.h"
+#include "vemory/storage/VNodeIndex.h"
 
 int main() {
   EventLoop evloop;
   TcpServer server(evloop);
-  VectorSetRegistry registry;
-  CommandHandler commands(&registry, nullptr);
+  VNodeIndex vnode_index;
+  CommandHandler commands(&vnode_index, nullptr);
   auto protocol = std::make_shared<RespProtocolHandler>();
 
   server.Start("0.0.0.0", 8989, [&commands, protocol](TcpConn::Ptr conn) {

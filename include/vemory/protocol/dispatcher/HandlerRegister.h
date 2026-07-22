@@ -9,7 +9,7 @@
 using CommandHandlerFn = void (*)(const RequestContext& ctx, std::string* reply,
                                   void* arg);
 
-// Maps CommandType → handler fn + opaque arg (e.g. VectorSetRegistry*).
+// Maps CommandType → handler fn + opaque arg (e.g. VNodeIndex* / KvStore*).
 class HandlerRegister {
  public:
   void Register(CommandType cmd, CommandHandlerFn fn, void* arg);

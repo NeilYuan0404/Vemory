@@ -8,24 +8,22 @@
 
 #include "vemory/protocol/CommandType.h"
 
-// How VSIM supplies the query vector.
-enum class VsimMode : uint8_t {
-  kNone = 0,
-  kEle,
-  kValues,
-};
-
 // One client request after RESP argv → command mapping.
 struct RequestContext {
   int client_fd = -1;
   CommandType cmd = CommandType::kUnknown;
+
+  // Semantic cache (VSET/VGET/VDEL).
+  std::string vector_blob;
+  std::string user_key;
+  std::string question;
+  std::string answer;
+  float threshold = 0.f;
+
+  // String KVS / assist: SET/GET/DEL key; value or message in element.
   std::string key;
   std::string element;
-  std::vector<float> embed;
-  // VSIM: neighbor count (default 10); WITHSCORES flag.
-  std::size_t count = 10;
-  bool with_scores = false;
-  VsimMode vsim_mode = VsimMode::kNone;
+
   std::chrono::steady_clock::time_point recv_time{};
 
   enum class Status : uint8_t {
@@ -37,12 +35,9 @@ struct RequestContext {
   };
 
   // Expected shapes:
-  //   VADD <key> VALUES <dim> <f1> … <fN> <element>
-  //   VSIM <key> ELE <element> [COUNT <n>] [WITHSCORES]
-  //   VSIM <key> VALUES <dim> <f1>…<fN> [COUNT <n>] [WITHSCORES]
-  //   VDIM <key>
-  //   VEMB <key> <element>
-  //   VCARD <key>
+  //   VSET <vector_blob> <user_key> <question> <answer>
+  //   VGET <query_vector_blob> <threshold>
+  //   VDEL <user_key>
   //   SET <key> <value>   (value stored in element)
   //   GET <key>
   //   DEL <key>

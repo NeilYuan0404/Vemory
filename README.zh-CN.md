@@ -4,7 +4,7 @@
 
 兼容 RESP 的向量集合（Vector Set）服务端（Redis Vector Set 风格子集）。可用 `redis-cli` 连接。
 
-**v0.1.1 — 早期 MVP。** 数据**仅存内存**（重启即丢失）。单线程 epoll 反应器。命令集是 Redis Vector Set 的**子集**，另含基础 `SET`/`GET`/`DEL` —— 并非 Redis 的完整替代品。网络 / RESP 解析路径已针对 pipeline 场景加固；详见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v0.1.1+（迈向 0.2）— 早期 MVP。** 数据**仅存内存**。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 
@@ -85,42 +85,31 @@ Pipeline 扫描（`c=1`）：
 | `make compile-commands` | 刷新 `compile_commands.json`（供 clangd） |
 | `make clean` | 删除 `build/`、`bin/`、`generated/` |
 
-入口：[`src/Vemory.cc`](src/Vemory.cc)。维度在某 key 首次 `VADD` 时确定。
+入口：[`src/Vemory.cc`](src/Vemory.cc)。维度在首次成功 `VSET` 时锁定（`dim = blob字节数 / sizeof(float)`）。
 
 ## 命令
 
-线协议为 Redis RESP。Redis Vector Set 相关命令子集：
+线协议为 Redis RESP（bulk 支持二进制）。语义缓存命令：
 
 | 命令 | 参数 | 回复 |
 |---------|------|-------|
-| `VADD` | `<key> VALUES <dim> <f1> … <fN> <element>` | 整数 `1` |
-| `VSIM` | `<key> ELE <element> [COUNT <n>] [WITHSCORES]` 或 `<key> VALUES <dim> <f1>…<fN> [COUNT <n>] [WITHSCORES]` | 元素数组（或 元素/分数 对） |
-| `VDIM` | `<key>` | 整数维度 |
-| `VEMB` | `<key> <element>` | 浮点数字符串数组 |
-| `VCARD` | `<key>` | 整数基数（key 不存在时为 `0`） |
+| `VSET` | `<vector_blob> <user_key> <question> <answer>` | `+OK` 或 `-ERR …` |
+| `VGET` | `<query_vector_blob> <threshold>` | bulk `answer`，未命中为 null bulk |
+| `VDEL` | `<user_key>` | `:1` / `:0` |
 
-`COUNT` 默认 **10**。分数为余弦相似度（`1 - distance`）。
+向量为小端 `float32` 原始字节；`threshold` 为余弦**距离**上限。另有 `SET`/`GET`/`DEL`、`PING`/`ECHO`。
 
-示例：
-
-```bash
-redis-cli VADD docs VALUES 8 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 apple
-redis-cli VSIM docs VALUES 8 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 COUNT 3 WITHSCORES
-redis-cli VSIM docs ELE apple COUNT 3
-redis-cli VDIM docs
-redis-cli VEMB docs apple
-redis-cli VCARD docs
-```
+二进制 blob 不适合手敲 `redis-cli`；缓存命令请用客户端库或单测。`bench/smoke/vector.sh` 等仍指向已移除的 Vector Set 动词，将在后续 commit 更新。
 
 ## 架构
 
 ```
-redis-cli
+client
   → TcpServer / EventLoop (epoll)
     → ProtocolExecutor + RespProtocolHandler
       → CommandHandler
-        → VectorSetRegistry
-          → VectorSet (name↔id, vectors, USearchEmbedIndex)
+        → VNodeIndex (VNodeStorage + USearchEmbedIndex)
+        → KvStore
 ```
 
 各层设计说明：

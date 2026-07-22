@@ -75,6 +75,22 @@ Pipeline 扫描（`c=1`）：
 
 详见 [`bench/README.md`](bench/README.md)。
 
+### 最近一次 vector metrics
+
+运行：`HOST=127.0.0.1 PORT=8989 bench/.venv/bin/python bench/vector_metrics.py`  
+（debug `bin/vemory` 监听 `:8989`，单连接；`glove-25-angular` 子集）
+
+| 指标 | 结果 |
+|------|------:|
+| CARD / QUERIES / THRESHOLD | 10000 / 200 / 0.2 |
+| dim | 25 |
+| agree | 1.0000 |
+| latency p50 / p99 | 1.83 ms / 2.81 ms |
+| QPS@agree≥0.95 | 536.2 |
+| VSET 灌库 | 329.4 ops/s |
+
+仅供参考——单线程事件循环，非多客户端打满压测。
+
 其他目标：
 
 | 目标 | 用途 |

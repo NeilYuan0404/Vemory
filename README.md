@@ -75,6 +75,22 @@ Pipeline sweep (`c=1`):
 
 See [`bench/README.md`](bench/README.md).
 
+### Latest vector metrics
+
+Run: `HOST=127.0.0.1 PORT=8989 bench/.venv/bin/python bench/vector_metrics.py`  
+(debug `bin/vemory` on `:8989`, single client connection; `glove-25-angular` subset)
+
+| Metric | Value |
+|--------|------:|
+| CARD / QUERIES / THRESHOLD | 10000 / 200 / 0.2 |
+| dim | 25 |
+| agree | 1.0000 |
+| latency p50 / p99 | 1.83 ms / 2.81 ms |
+| QPS@agree≥0.95 | 536.2 |
+| VSET load | 329.4 ops/s |
+
+Indicative only — single-threaded event loop, not a saturated multi-client load test.
+
 Other targets:
 
 | Target | Purpose |

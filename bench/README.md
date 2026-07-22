@@ -1,10 +1,12 @@
 # Vemory benches
 
-Requires a running server (`./bin/vemory` or `./bin/vemory <port>`) and Redis CLI tools (`redis-benchmark`, `redis-cli`).
+Requires a running server (`./bin/vemory` or `./bin/vemory <port>`).
 
 Default: `HOST=127.0.0.1`, `PORT=6379`.
 
 Smoke scripts live under [`smoke/`](smoke/). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`vector_metrics.py`](vector_metrics.py).
+
+Semantic-cache vector benches use **Python + redis-py** (raw float32 blobs). Prefer `bench/.venv` after `pip install -r bench/requirements.txt`.
 
 ## Smoke — KVS / protocol (`smoke/kvs.sh`)
 
@@ -57,9 +59,9 @@ PIPELINES="10 40 160" PORT=8989 ./bench/smoke/pipeline.sh
 | `D` | `64` | SET value size in bytes (`-d`) |
 | `PIPELINES` | `10 20 40 100 160` | Pipeline depths (`-P`) |
 
-## Smoke — Vector (`smoke/vector.sh`)
+## Smoke — Vector / semantic cache (`smoke/vector.sh`)
 
-Warm-up `VADD`, then timed `VSIM` (ELE and VALUES). Uses `redis-cli -2` (not `redis-benchmark`). One client process per command (fine for microchecks; lower `CARD` / `QUERIES` for a quick run).
+Thin wrapper around [`smoke/vector.py`](smoke/vector.py): timed `VSET` load, timed `VGET` queries, `VDEL` spot-check. Uses redis-py binary blobs (not `redis-cli`).
 
 ```bash
 ./bench/smoke/vector.sh
@@ -69,13 +71,12 @@ PORT=8989 DIM=8 CARD=100 QUERIES=50 ./bench/smoke/vector.sh
 | Env | Default | Meaning |
 |-----|---------|---------|
 | `HOST` / `PORT` | as above | Server |
-| `KEY` | `bench` | Vector set name |
 | `DIM` | `8` | Embedding dimension |
-| `CARD` | `1000` | Elements to insert |
-| `QUERIES` | `500` | VSIM queries per mode |
-| `COUNT` | `10` | VSIM top-k |
+| `CARD` | `1000` | Vectors to `VSET` |
+| `QUERIES` | `500` | Timed `VGET` queries |
+| `THRESHOLD` | `0.2` | Cosine **distance** gate for `VGET` |
 
-Reports wall time and QPS for load + each query mode. Single-threaded client; server is one event loop.
+Reports wall time and QPS for load + query, then checks `VDEL`. Single-threaded client; server is one event loop. Needs `redis` (`bench/.venv` preferred).
 
 ## Pipeline compare (`pipeline_bench.py`)
 
@@ -102,20 +103,20 @@ PIPELINES="10 40 160" python3 bench/pipeline_bench.py
 
 Industry-style metrics on a running server, **single Redis connection**:
 
-1. **Recall@10** (or `COUNT`) vs cosine brute-force ground truth on the loaded subset  
-2. **p50 / p99** `VSIM` latency  
-3. **QPS@recall≥0.95** — reported only if recall meets the gate; otherwise `N/A` and exit `1`
+1. **agree** — fraction of queries where `VGET` matches the exact top-1 cosine oracle under `THRESHOLD` (hit → expected answer `e{i}`; miss → null)
+2. **p50 / p99** `VGET` latency
+3. **QPS@agree≥0.95** — reported only if agreement meets the gate; otherwise `N/A` and exit `1`
 
 Uses an [ANN-Benchmarks](https://github.com/erikbern/ann-benchmarks) HDF5 dataset (default `glove-25-angular`). First run downloads ~121MB into `bench/data/` (gitignored). Only a **subset** is loaded (`CARD` / `QUERIES`); HDF5 `neighbors` are ignored and ground truth is recomputed with **cosine** on that subset (aligned with Vemory’s metric; not comparable to published full-train leaderboard numbers).
 
-Keep [`smoke/vector.sh`](smoke/vector.sh) for quick redis-cli smoke; this script is for quality + latency.
+Keep [`smoke/vector.sh`](smoke/vector.sh) for quick smoke; this script is for quality + latency.
 
 ```bash
 python3 -m venv bench/.venv
 bench/.venv/bin/pip install -r bench/requirements.txt
 ./bin/vemory 8989   # separate terminal
 HOST=127.0.0.1 PORT=8989 bench/.venv/bin/python bench/vector_metrics.py
-CARD=2000 QUERIES=50 PORT=8989 bench/.venv/bin/python bench/vector_metrics.py   # quicker
+CARD=2000 QUERIES=50 PORT=8989 THRESHOLD=0.2 bench/.venv/bin/python bench/vector_metrics.py   # quicker
 ```
 
 | Env | Default | Meaning |
@@ -123,13 +124,15 @@ CARD=2000 QUERIES=50 PORT=8989 bench/.venv/bin/python bench/vector_metrics.py   
 | `HOST` / `PORT` | `127.0.0.1` / `6379` | Server |
 | `DATASET` | `glove-25-angular` | HDF5 name under `http://ann-benchmarks.com/{name}.hdf5` |
 | `DATA_DIR` | `bench/data` | Local cache directory |
-| `CARD` | `10000` | Train vectors to `VADD` (max `65534`) |
-| `QUERIES` | `200` | Timed `VSIM` queries |
-| `COUNT` | `10` | Top-k for recall and `VSIM` |
+| `CARD` | `10000` | Train vectors to `VSET` (max `65534`) |
+| `QUERIES` | `200` | Timed `VGET` queries |
+| `THRESHOLD` | `0.2` | Cosine **distance** upper bound |
 
-## Sample results (local, 2026-07-19)
+Shared helpers: [`vemory_vec.py`](vemory_vec.py).
 
-WSL2, debug `bin/vemory` on `:8989`, single event loop. Numbers are indicative only.
+## Sample results (local, indicative)
+
+WSL2, debug `bin/vemory` on `:8989`, single event loop. Numbers are indicative only; re-run after changes.
 
 ### Smoke — KVS (`N=10000 C=10 P=8`)
 
@@ -140,29 +143,18 @@ WSL2, debug `bin/vemory` on `:8989`, single event loop. Numbers are indicative o
 | SET | ~115k | |
 | GET | ~125k | |
 
-### Smoke — Vector (`DIM=8 CARD=100 QUERIES=50 COUNT=10`)
+### Smoke — Vector (`DIM=8 CARD=100 QUERIES=50 THRESHOLD=0.2`)
 
-| Phase | Result |
-|-------|--------|
-| VADD | 100 in ~3.9 s (~26 ops/s; one `redis-cli` per command) |
-| VSIM ELE | ~117 qps |
-| VSIM VALUES | exit 0 (wall time dominated by `redis-cli` argv overhead) |
+Re-run `./bench/smoke/vector.sh` for current VSET/VGET/VDEL numbers.
 
-### Vector metrics (`glove-25-angular`, defaults)
+### Vector metrics (`glove-25-angular`)
 
-| Metric | Value |
-|--------|------:|
-| card / queries | 10000 / 200 |
-| recall@10 | 0.9905 |
-| latency_p50_ms | 1.58 |
-| latency_p99_ms | 2.68 |
-| qps@recall≥0.95 | 604.6 |
-
-Recall is cosine exact-top-10 on the **loaded subset**, not the full ANN-Benchmarks train set. Gate passed (exit 0).
+Re-run `bench/vector_metrics.py` for `agree` / p50 / p99 / gated QPS.
 
 ## Notes
 
 - `KvStore` is `unordered_map`; load gaps vs Redis are mostly single-threaded I/O, not linear scan.
 - Prefer `redis-benchmark … PING` / `ECHO` over `-t ping`; avoid `redis-cli --pipe` (inline/HELLO quirks).
+- Binary `VSET`/`VGET` need redis-py (or another RESP client); interactive `redis-cli` is awkward for float blobs.
 - After changing `CommandType`, rebuild with `make clean && make` if handlers look stale.
 - HDF5 download needs a normal `User-Agent` (script sets one; falls back to `vectors.erikbern.com` if needed).

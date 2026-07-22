@@ -47,9 +47,9 @@ redis-cli -p 8989
 ```bash
 ./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
 ./bench/smoke/pipeline.sh  # c=1 管道冒烟（仅 Vemory）
-./bench/smoke/vector.sh    # VADD 预热 + VSIM
+./bench/smoke/vector.sh    # VSET 灌库 + VGET + VDEL 抽检（redis-py）
 python3 bench/pipeline_bench.py                  # c=1 SET/GET：Vemory vs Redis
-bench/.venv/bin/python bench/vector_metrics.py   # Recall@10 / p50·p99 / QPS@recall≥0.95（见 bench/README.md）
+bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95（见 bench/README.md）
 ```
 
 ### 最近一次 pipeline 结果
@@ -99,7 +99,7 @@ Pipeline 扫描（`c=1`）：
 
 向量为小端 `float32` 原始字节；`threshold` 为余弦**距离**上限。另有 `SET`/`GET`/`DEL`、`PING`/`ECHO`。
 
-二进制 blob 不适合手敲 `redis-cli`；缓存命令请用客户端库或单测。`bench/smoke/vector.sh` 等仍指向已移除的 Vector Set 动词，将在后续 commit 更新。
+二进制 blob 不适合手敲 `redis-cli`；缓存命令请用客户端库、压测脚本（`bench/smoke/vector.sh`、`vector_metrics.py`）或单测。字符串 KVS 仍可用 `redis-cli`。
 
 ## 架构
 

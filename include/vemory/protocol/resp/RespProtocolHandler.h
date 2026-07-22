@@ -6,7 +6,7 @@
 #include "vemory/net/MessageBuffer.h"
 #include "vemory/protocol/RequestContext.h"
 
-// RESP parse: MessageBuffer → DecodeArrayOfBulk → RequestContext (via FromArgv).
+// RESP parse: MessageBuffer → DecodeArrayOfBulk → RequestContext (via FromTokens).
 class RespProtocolHandler {
  public:
   enum class Status : uint8_t {
@@ -16,7 +16,7 @@ class RespProtocolHandler {
   };
 
   // On kOk: *out is filled (owned strings), *consumed is frame size to pass to
-  // MessageBuffer::ReadCompleted. Callers must not call FromArgv separately.
+  // MessageBuffer::ReadCompleted. Callers must not call FromTokens separately.
   Status TryParse(int client_fd, MessageBuffer& buf, RequestContext* out,
                   size_t* consumed);
 };

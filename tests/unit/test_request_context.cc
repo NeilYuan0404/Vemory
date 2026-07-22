@@ -33,10 +33,10 @@ TEST(CommandType, Parse_WireNames) {
   EXPECT_EQ(ParseCommandType(""), CommandType::kUnknown);
 }
 
-TEST(RequestContext, FromArgv_Vset) {
+TEST(RequestContext, FromTokens_Vset) {
   const std::string blob = FloatBlob({1.f, 0.5f});
   RequestContext ctx;
-  auto st = RequestContext::FromArgv(
+  auto st = RequestContext::FromTokens(
       7,
       std::vector<std::string_view>{"VSET", blob, "uk1", "q?", "a!"},
       &ctx);
@@ -50,10 +50,10 @@ TEST(RequestContext, FromArgv_Vset) {
   EXPECT_NE(ctx.recv_time.time_since_epoch().count(), 0);
 }
 
-TEST(RequestContext, FromArgv_Vget) {
+TEST(RequestContext, FromTokens_Vget) {
   const std::string blob = FloatBlob({0.1f, 0.2f});
   RequestContext ctx;
-  auto st = RequestContext::FromArgv(
+  auto st = RequestContext::FromTokens(
       1, std::vector<std::string_view>{"VGET", blob, "0.08"}, &ctx);
   ASSERT_EQ(st, RequestContext::Status::kOk);
   EXPECT_EQ(ctx.cmd, CommandType::kVget);
@@ -61,19 +61,19 @@ TEST(RequestContext, FromArgv_Vget) {
   EXPECT_FLOAT_EQ(ctx.threshold, 0.08f);
 }
 
-TEST(RequestContext, FromArgv_Vdel) {
+TEST(RequestContext, FromTokens_Vdel) {
   RequestContext ctx;
   ASSERT_EQ(
-      RequestContext::FromArgv(1, std::vector<std::string_view>{"VDEL", "uk"},
+      RequestContext::FromTokens(1, std::vector<std::string_view>{"VDEL", "uk"},
                                &ctx),
       RequestContext::Status::kOk);
   EXPECT_EQ(ctx.cmd, CommandType::kVdel);
   EXPECT_EQ(ctx.user_key, "uk");
 }
 
-TEST(RequestContext, FromArgv_SetGetDel) {
+TEST(RequestContext, FromTokens_SetGetDel) {
   RequestContext ctx;
-  ASSERT_EQ(RequestContext::FromArgv(
+  ASSERT_EQ(RequestContext::FromTokens(
                 1, std::vector<std::string_view>{"SET", "k", "v"}, &ctx),
             RequestContext::Status::kOk);
   EXPECT_EQ(ctx.cmd, CommandType::kSet);
@@ -81,46 +81,46 @@ TEST(RequestContext, FromArgv_SetGetDel) {
   EXPECT_EQ(ctx.element, "v");
 
   ASSERT_EQ(
-      RequestContext::FromArgv(1, std::vector<std::string_view>{"GET", "k"},
+      RequestContext::FromTokens(1, std::vector<std::string_view>{"GET", "k"},
                                &ctx),
       RequestContext::Status::kOk);
   EXPECT_EQ(ctx.cmd, CommandType::kGet);
 
   ASSERT_EQ(
-      RequestContext::FromArgv(1, std::vector<std::string_view>{"DEL", "k"},
+      RequestContext::FromTokens(1, std::vector<std::string_view>{"DEL", "k"},
                                &ctx),
       RequestContext::Status::kOk);
   EXPECT_EQ(ctx.cmd, CommandType::kDel);
 }
 
-TEST(RequestContext, FromArgv_PingEcho) {
+TEST(RequestContext, FromTokens_PingEcho) {
   RequestContext ctx;
   ASSERT_EQ(
-      RequestContext::FromArgv(1, std::vector<std::string_view>{"PING"}, &ctx),
+      RequestContext::FromTokens(1, std::vector<std::string_view>{"PING"}, &ctx),
       RequestContext::Status::kOk);
   EXPECT_EQ(ctx.cmd, CommandType::kPing);
 
-  ASSERT_EQ(RequestContext::FromArgv(
+  ASSERT_EQ(RequestContext::FromTokens(
                 1, std::vector<std::string_view>{"ECHO", "world"}, &ctx),
             RequestContext::Status::kOk);
   EXPECT_EQ(ctx.element, "world");
 }
 
-TEST(RequestContext, FromArgv_Errors) {
+TEST(RequestContext, FromTokens_Errors) {
   RequestContext ctx;
-  EXPECT_EQ(RequestContext::FromArgv(1, {}, &ctx),
+  EXPECT_EQ(RequestContext::FromTokens(1, {}, &ctx),
             RequestContext::Status::kEmpty);
   EXPECT_EQ(
-      RequestContext::FromArgv(1, std::vector<std::string_view>{"FOO"}, &ctx),
+      RequestContext::FromTokens(1, std::vector<std::string_view>{"FOO"}, &ctx),
       RequestContext::Status::kUnknownCommand);
-  EXPECT_EQ(RequestContext::FromArgv(
+  EXPECT_EQ(RequestContext::FromTokens(
                 1, std::vector<std::string_view>{"VSET", "b", "k"}, &ctx),
             RequestContext::Status::kWrongArity);
-  EXPECT_EQ(RequestContext::FromArgv(
+  EXPECT_EQ(RequestContext::FromTokens(
                 1, std::vector<std::string_view>{"VGET", "b", "x"}, &ctx),
             RequestContext::Status::kBadValue);
   EXPECT_EQ(
-      RequestContext::FromArgv(1, std::vector<std::string_view>{"VDEL", ""},
+      RequestContext::FromTokens(1, std::vector<std::string_view>{"VDEL", ""},
                                &ctx),
       RequestContext::Status::kBadValue);
 }

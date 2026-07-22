@@ -17,10 +17,10 @@ class RespDecode {
 
   // Decode one RESP array of bulk strings (Redis command form):
   //   *<n>\r\n $<len>\r\n <body>\r\n ...
-  // On kOk, *bulks holds string_views into `data`; *consumed is total frame
+  // On kOk, *tokens holds string_views into `data`; *consumed is total frame
   // size.
   static Status DecodeArrayOfBulk(const char* data, size_t size,
-                                  std::vector<std::string_view>* bulks,
+                                  std::vector<std::string_view>* tokens,
                                   size_t* consumed);
 
  private:

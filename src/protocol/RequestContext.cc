@@ -50,17 +50,17 @@ void ClearOut(RequestContext* out, int client_fd, CommandType cmd) {
 
 }  // namespace
 
-RequestContext::Status RequestContext::FromArgv(
-    int client_fd, const std::vector<std::string_view>& argv,
+RequestContext::Status RequestContext::FromTokens(
+    int client_fd, const std::vector<std::string_view>& tokens,
     RequestContext* out) {
   if (out == nullptr) {
     return Status::kEmpty;
   }
-  if (argv.empty()) {
+  if (tokens.empty()) {
     return Status::kEmpty;
   }
 
-  const CommandType cmd = ParseCommandType(argv[0]);
+  const CommandType cmd = ParseCommandType(tokens[0]);
   auto fail = [&](Status st) {
     ClearOut(out, client_fd, cmd == CommandType::kUnknown ? CommandType::kUnknown
                                                           : cmd);
@@ -74,54 +74,54 @@ RequestContext::Status RequestContext::FromArgv(
   switch (cmd) {
     case CommandType::kVset: {
       // VSET <vector_blob> <user_key> <question> <answer>
-      if (argv.size() != 5) {
+      if (tokens.size() != 5) {
         return fail(Status::kWrongArity);
       }
-      if (argv[2].empty()) {
+      if (tokens[2].empty()) {
         return fail(Status::kBadValue);
       }
       ClearOut(out, client_fd, cmd);
-      out->vector_blob.assign(argv[1].data(), argv[1].size());
-      out->user_key.assign(argv[2].data(), argv[2].size());
-      out->question.assign(argv[3].data(), argv[3].size());
-      out->answer.assign(argv[4].data(), argv[4].size());
+      out->vector_blob.assign(tokens[1].data(), tokens[1].size());
+      out->user_key.assign(tokens[2].data(), tokens[2].size());
+      out->question.assign(tokens[3].data(), tokens[3].size());
+      out->answer.assign(tokens[4].data(), tokens[4].size());
       out->recv_time = std::chrono::steady_clock::now();
       return Status::kOk;
     }
     case CommandType::kVget: {
       // VGET <query_vector_blob> <threshold>
-      if (argv.size() != 3) {
+      if (tokens.size() != 3) {
         return fail(Status::kWrongArity);
       }
       float thr = 0.f;
-      if (!ParseFloat(argv[2], &thr)) {
+      if (!ParseFloat(tokens[2], &thr)) {
         return fail(Status::kBadValue);
       }
       ClearOut(out, client_fd, cmd);
-      out->vector_blob.assign(argv[1].data(), argv[1].size());
+      out->vector_blob.assign(tokens[1].data(), tokens[1].size());
       out->threshold = thr;
       out->recv_time = std::chrono::steady_clock::now();
       return Status::kOk;
     }
     case CommandType::kVdel: {
-      if (argv.size() != 2) {
+      if (tokens.size() != 2) {
         return fail(Status::kWrongArity);
       }
-      if (argv[1].empty()) {
+      if (tokens[1].empty()) {
         return fail(Status::kBadValue);
       }
       ClearOut(out, client_fd, cmd);
-      out->user_key.assign(argv[1].data(), argv[1].size());
+      out->user_key.assign(tokens[1].data(), tokens[1].size());
       out->recv_time = std::chrono::steady_clock::now();
       return Status::kOk;
     }
     case CommandType::kSet: {
-      if (argv.size() != 3) {
+      if (tokens.size() != 3) {
         return fail(Status::kWrongArity);
       }
       ClearOut(out, client_fd, cmd);
-      out->key.assign(argv[1].data(), argv[1].size());
-      out->element.assign(argv[2].data(), argv[2].size());
+      out->key.assign(tokens[1].data(), tokens[1].size());
+      out->element.assign(tokens[2].data(), tokens[2].size());
       if (out->key.empty()) {
         return fail(Status::kBadValue);
       }
@@ -130,11 +130,11 @@ RequestContext::Status RequestContext::FromArgv(
     }
     case CommandType::kGet:
     case CommandType::kDel: {
-      if (argv.size() != 2) {
+      if (tokens.size() != 2) {
         return fail(Status::kWrongArity);
       }
       ClearOut(out, client_fd, cmd);
-      out->key.assign(argv[1].data(), argv[1].size());
+      out->key.assign(tokens[1].data(), tokens[1].size());
       if (out->key.empty()) {
         return fail(Status::kBadValue);
       }
@@ -142,22 +142,22 @@ RequestContext::Status RequestContext::FromArgv(
       return Status::kOk;
     }
     case CommandType::kPing: {
-      if (argv.size() > 2) {
+      if (tokens.size() > 2) {
         return fail(Status::kWrongArity);
       }
       ClearOut(out, client_fd, cmd);
-      if (argv.size() == 2) {
-        out->element.assign(argv[1].data(), argv[1].size());
+      if (tokens.size() == 2) {
+        out->element.assign(tokens[1].data(), tokens[1].size());
       }
       out->recv_time = std::chrono::steady_clock::now();
       return Status::kOk;
     }
     case CommandType::kEcho: {
-      if (argv.size() != 2) {
+      if (tokens.size() != 2) {
         return fail(Status::kWrongArity);
       }
       ClearOut(out, client_fd, cmd);
-      out->element.assign(argv[1].data(), argv[1].size());
+      out->element.assign(tokens[1].data(), tokens[1].size());
       out->recv_time = std::chrono::steady_clock::now();
       return Status::kOk;
     }

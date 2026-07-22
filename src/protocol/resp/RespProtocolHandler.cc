@@ -29,6 +29,6 @@ RespProtocolHandler::Status RespProtocolHandler::TryParse(
   // Map tokens while views are still valid (before caller ReadCompleted).
   // Semantic errors (unknown cmd / wrong arity) still yield a RequestContext
   // for CommandHandler to reply -ERR; only wire failures are kError.
-  (void)RequestContext::FromArgv(client_fd, tokens, out);
+  (void)RequestContext::FromTokens(client_fd, tokens, out);
   return Status::kOk;
 }

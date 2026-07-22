@@ -53,23 +53,23 @@ TEST(RespEncode, OkAndBulkRoundTripShape) {
 
 TEST(RespDecode, ArrayOfBulk_Ok) {
   const char* frame = "*3\r\n$4\r\nVSET\r\n$1\r\na\r\n$1\r\nb\r\n";
-  std::vector<std::string_view> bulks;
+  std::vector<std::string_view> tokens;
   size_t consumed = 0;
-  auto st = RespDecode::DecodeArrayOfBulk(frame, std::strlen(frame), &bulks,
+  auto st = RespDecode::DecodeArrayOfBulk(frame, std::strlen(frame), &tokens,
                                           &consumed);
   ASSERT_EQ(st, RespDecode::Status::kOk);
   EXPECT_EQ(consumed, std::strlen(frame));
-  ASSERT_EQ(bulks.size(), 3u);
-  EXPECT_EQ(bulks[0], "VSET");
-  EXPECT_EQ(bulks[1], "a");
-  EXPECT_EQ(bulks[2], "b");
+  ASSERT_EQ(tokens.size(), 3u);
+  EXPECT_EQ(tokens[0], "VSET");
+  EXPECT_EQ(tokens[1], "a");
+  EXPECT_EQ(tokens[2], "b");
 }
 
 TEST(RespDecode, ArrayOfBulk_NeedMore) {
   const char* partial = "*2\r\n$4\r\nVGET\r\n$3\r\nab";
-  std::vector<std::string_view> bulks;
+  std::vector<std::string_view> tokens;
   size_t consumed = 0;
-  auto st = RespDecode::DecodeArrayOfBulk(partial, std::strlen(partial), &bulks,
+  auto st = RespDecode::DecodeArrayOfBulk(partial, std::strlen(partial), &tokens,
                                           &consumed);
   EXPECT_EQ(st, RespDecode::Status::kNeedMore);
   EXPECT_EQ(consumed, 0u);
@@ -77,10 +77,10 @@ TEST(RespDecode, ArrayOfBulk_NeedMore) {
 
 TEST(RespDecode, ArrayOfBulk_Malformed) {
   const char* bad = "+OK\r\n";
-  std::vector<std::string_view> bulks;
+  std::vector<std::string_view> tokens;
   size_t consumed = 0;
   auto st =
-      RespDecode::DecodeArrayOfBulk(bad, std::strlen(bad), &bulks, &consumed);
+      RespDecode::DecodeArrayOfBulk(bad, std::strlen(bad), &tokens, &consumed);
   EXPECT_EQ(st, RespDecode::Status::kError);
 }
 

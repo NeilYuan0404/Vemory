@@ -8,7 +8,7 @@
 
 #include "vemory/protocol/CommandType.h"
 
-// One client request after RESP argv → command mapping.
+// One client request after RESP tokens → command mapping.
 struct RequestContext {
   int client_fd = -1;
   CommandType cmd = CommandType::kUnknown;
@@ -43,7 +43,7 @@ struct RequestContext {
   //   DEL <key>
   //   PING [<message>]    (message in element)
   //   ECHO <message>      (message in element)
-  static Status FromArgv(int client_fd,
-                         const std::vector<std::string_view>& argv,
-                         RequestContext* out);
+  static Status FromTokens(int client_fd,
+                           const std::vector<std::string_view>& tokens,
+                           RequestContext* out);
 };

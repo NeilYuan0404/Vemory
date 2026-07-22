@@ -18,7 +18,7 @@ I/O: [`../Network/Reactor.md`](../Network/Reactor.md); storage: [`../Storage/Sto
 TcpConn::ReadCallback
   → ProtocolExecutor::OnBufferReadable(fd, InputBuffer)
     → loop until NeedMore / Error:
-         RespProtocolHandler::TryParse  // DecodeArrayOfBulk → FromArgv
+         RespProtocolHandler::TryParse  // DecodeArrayOfBulk → FromTokens
          MessageBuffer::ReadCompleted(consumed)
          DispatchCallback(RequestContext, reply) → append reply to batch
               → CommandHandler → HandlerRegister[cmd]

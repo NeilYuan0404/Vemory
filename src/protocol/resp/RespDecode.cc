@@ -46,12 +46,12 @@ bool RespDecode::ParseIntegerLine(const char* data, size_t size, size_t* pos,
 }
 
 RespDecode::Status RespDecode::DecodeArrayOfBulk(
-    const char* data, size_t size, std::vector<std::string_view>* bulks,
+    const char* data, size_t size, std::vector<std::string_view>* tokens,
     size_t* consumed) {
-  if (bulks == nullptr || consumed == nullptr) {
+  if (tokens == nullptr || consumed == nullptr) {
     return Status::kError;
   }
-  bulks->clear();
+  tokens->clear();
   *consumed = 0;
 
   if (size == 0 || data == nullptr) {
@@ -75,7 +75,7 @@ RespDecode::Status RespDecode::DecodeArrayOfBulk(
     return Status::kError;
   }
 
-  bulks->reserve(static_cast<size_t>(count));
+  tokens->reserve(static_cast<size_t>(count));
   for (int64_t i = 0; i < count; ++i) {
     if (pos >= size) {
       return Status::kNeedMore;
@@ -107,7 +107,7 @@ RespDecode::Status RespDecode::DecodeArrayOfBulk(
       return Status::kError;
     }
 
-    bulks->emplace_back(data + pos, body_len);
+    tokens->emplace_back(data + pos, body_len);
     pos += body_len + 2;
   }
 

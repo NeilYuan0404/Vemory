@@ -3,9 +3,10 @@
 #include <cstdint>
 #include <string>
 
-// One Q&A memory node (owned). Vectors live on RequestContext / the embed index.
+// One semantic-cache node (owned). Vectors live in USearchEmbedIndex by id.
 struct VNode {
   uint16_t id = 0;
-  std::string prompt;
+  std::string user_key;
+  std::string question;
   std::string answer;
 };

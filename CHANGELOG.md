@@ -2,6 +2,21 @@
 
 All notable changes to Vemory are documented in this file.
 
+## [Unreleased] — toward 0.2.0
+
+### Breaking
+- Removed Redis Vector Set verbs: `VADD`, `VSIM`, `VDIM`, `VEMB`, `VCARD`
+- Removed `VectorSet` / `VectorSetRegistry` / `VectorDispatcher`
+
+### Added
+- Semantic cache API: `VSET` / `VGET` / `VDEL` with raw float32 blobs
+- `VNodeIndex` orchestrating `VNodeStorage` + `USearchEmbedIndex`
+- `VNode` fields: `user_key`, `question`, `answer` (id reused on same `user_key`)
+
+### Notes
+- `VGET` threshold is cosine **distance** (not similarity)
+- Bench scripts under `bench/smoke/vector.sh` and `vector_metrics.py` still call removed verbs; update in a follow-up commit
+
 ## [0.1.1] — 2026-07-22
 
 Protocol / network path hardening and layout cleanup after pipeline smoke benches.

@@ -102,4 +102,4 @@ server.Start(port, [&](TcpConn::Ptr conn) {
 | [`MessageBuffer.md`](MessageBuffer.md) | Userspace read buffer |
 | [`Protocol.md`](Protocol.md) | Protocol hook, RESP, `RequestContext` |
 | [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md) | `VNodeStorage`, `ProtobufVNodeCodec` (replication; unused by commands) |
-| [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md) | `VectorSetRegistry`, `VectorSet`, `CommandHandler` |
+| [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md) | `USearchEmbedIndex`, `VNodeIndex` |

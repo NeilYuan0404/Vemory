@@ -1,8 +1,10 @@
 # Storage Layer
 
-Owns string KVS (`KvStore`), domain `VNode` helpers, and a codec reserved for **replication**. Live command paths:
+Owns string KVS (`KvStore`), semantic-cache nodes (`VNode` / `VNodeStorage` / `VNodeIndex`), and a codec reserved for **replication**.
 
-- Vector sets: [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md)
+Live command paths:
+
+- Semantic cache: `VSET` / `VGET` / `VDEL` → `VNodeIndex` (see also [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md))
 - String KVS: `SET` / `GET` / `DEL` → `KvStore` via `KvsDispatcher`
 
 Network / parse: [`../Protocol/Protocol.md`](../Protocol/Protocol.md).
@@ -14,37 +16,35 @@ Network / parse: [`../Protocol/Protocol.md`](../Protocol/Protocol.md).
 | Belongs here | Does not belong here |
 |--------------|----------------------|
 | `KvStore` (SET/GET/DEL) | RESP wire decode |
-| `ProtobufVNodeCodec` (replication) | `VectorSet` / ANN |
-| `VNode` / `VNodeStorage` (in-memory Q&A maps; unused by current commands) | |
+| `VNode` / `VNodeStorage` / `VNodeIndex` | |
+| `ProtobufVNodeCodec` (replication) | |
 
 ---
 
 ## KvStore
 
-In-memory string map for Redis-style `SET` / `GET` / `DEL`. Backed by `std::unordered_map<std::string, std::string>` (average O(1) lookup).
+In-memory string map for Redis-style `SET` / `GET` / `DEL`.
 
 | API | Notes |
 |-----|-------|
-| `Set(key, value)` | Insert or replace; empty key rejected |
-| `Get(key, out)` | `kNotFound` if missing |
-| `Del(key)` | Erase one entry; `kNotFound` if missing |
-| `size()` | Entry count |
+| `Set` / `Get` / `Del` | Average O(1); empty key rejected on Set |
 
-Wire replies (`KvsDispatcher`): `SET` → `+OK`, `GET` → bulk / null bulk, `DEL` → `:1` / `:0`.
+---
+
+## VNode / VNodeStorage / VNodeIndex
+
+`VNode` = `{id, user_key, question, answer}`. Vectors live only in `USearchEmbedIndex`.
+
+| Component | Role |
+|-----------|------|
+| `VNodeStorage` | `by_id` + `by_user_key`; same `user_key` reuses id |
+| `VNodeIndex` | Orchestrates storage + ANN; dim from float blob length |
 
 ---
 
 ## ProtobufVNodeCodec
 
-Encode/decode between domain `VNode` and opaque protobuf bytes. Kept for **replication** (and future persist); not called on `VADD`/`VSIM`/… or `SET`/`GET`/`DEL`.
-
-Uses `vemory.VNodePb` (`proto/VNode.proto`): `id`, `prompt`, `answer` (no embed).
-
----
-
-## VNode / VNodeStorage
-
-`VNode` = `{id, prompt, answer}`. `VNodeStorage` stores nodes by value with prompt secondary index. Present for future use / unit tests; **not** wired into `src/Vemory.cc` today. Distinct from `KvStore`.
+Encode/decode `VNode` ↔ protobuf (`id`, `user_key`, `question`, `answer`). Not on the hot `VSET` path.
 
 ---
 
@@ -53,16 +53,8 @@ Uses `vemory.VNodePb` (`proto/VNode.proto`): `id`, `prompt`, `answer` (no embed)
 | Component | Header / schema | Source |
 |-----------|-----------------|--------|
 | KvStore | `include/vemory/storage/KvStore.h` | `src/storage/KvStore.cc` |
-| ProtobufVNodeCodec | `include/vemory/storage/ProtobufVNodeCodec.h` | `src/storage/ProtobufVNodeCodec.cc` |
-| VNode.proto | `proto/VNode.proto` | `generated/VNode.pb.{h,cc}` |
 | VNode | `include/vemory/storage/VNode.h` | (header-only) |
 | VNodeStorage | `include/vemory/storage/VNodeStorage.h` | `src/storage/VNodeStorage.cc` |
-
----
-
-## Follow-ups (not implemented)
-
-- Sharded / concurrent maps for `KvStore`
-- Replication using `ProtobufVNodeCodec`
-- Persist / WAL
-- Re-link Q&A nodes to vector set elements if needed
+| VNodeIndex | `include/vemory/storage/VNodeIndex.h` | `src/storage/VNodeIndex.cc` |
+| ProtobufVNodeCodec | `include/vemory/storage/ProtobufVNodeCodec.h` | `src/storage/ProtobufVNodeCodec.cc` |
+| VNode.proto | `proto/VNode.proto` | `generated/VNode.pb.{h,cc}` |

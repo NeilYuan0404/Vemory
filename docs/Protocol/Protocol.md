@@ -1,14 +1,14 @@
 # Protocol Parsing Layer
 
-Take unread bytes from `MessageBuffer` → **`RespProtocolHandler::TryParse`** → owned `RequestContext` → hand off to `CommandHandler` / `HandlerRegister` (see [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md)).
+Take unread bytes from `MessageBuffer` → **`RespProtocolHandler::TryParse`** → owned `RequestContext` → hand off to `CommandHandler` / `HandlerRegister`.
 
 Wire commands:
 
-- Vector (live): `VADD` / `VSIM` / `VDIM` / `VEMB` / `VCARD`
-- KVS (live): `SET` / `GET` / `DEL` → `KvStore` (`unordered_map`)
+- Semantic cache (live): `VSET` / `VGET` / `VDEL` → `VNodeIndex`
+- KVS (live): `SET` / `GET` / `DEL` → `KvStore`
 - Assist (live): `PING` / `ECHO`
 
-I/O: [`../Network/Reactor.md`](../Network/Reactor.md); buffer: [`../Network/MessageBuffer.md`](../Network/MessageBuffer.md); vector sets: [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md).
+I/O: [`../Network/Reactor.md`](../Network/Reactor.md); storage: [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md); ANN: [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md).
 
 ---
 
@@ -22,116 +22,43 @@ TcpConn::ReadCallback
          MessageBuffer::ReadCompleted(consumed)
          DispatchCallback(RequestContext, reply) → append reply to batch
               → CommandHandler → HandlerRegister[cmd]
-                   → VectorDispatcher → VectorSetRegistry
+                   → VNodeDispatcher → VNodeIndex
                    → KvsDispatcher    → KvStore
                    → AssistDispatcher → PING / ECHO
     → WriteCallback(batch) once  // pipeline: one Send per read round
 ```
 
-`RequestContext` is the **output** of `TryParse`, not a parallel path.
-
 ---
 
 ## HandlerRegister / domain dispatchers
 
-`CommandHandler` builds a function-pointer table (`HandlerRegister`) at construction:
-
 | Commands | Dispatcher | Notes |
 |----------|------------|-------|
-| `VADD` `VSIM` `VDIM` `VEMB` `VCARD` | `VectorDispatcher` | `arg` = `VectorSetRegistry*` |
+| `VSET` `VGET` `VDEL` | `VNodeDispatcher` | `arg` = `VNodeIndex*` |
 | `SET` `GET` `DEL` | `KvsDispatcher` | `arg` = `KvStore*` |
-| `PING` `ECHO` | `AssistDispatcher` | no store (`arg` = null) |
-
-`HandlerRegister::Dispatch` looks up `ctx.cmd`; missing / null entry → `ERR unknown command`.
-
----
-
-## RespProtocolHandler / ProtocolExecutor
-
-RESP-only parse path used by the network layer.
-
-### RespProtocolHandler
-
-| API | Signature | Notes |
-|-----|-----------|-------|
-| `TryParse` | `Status TryParse(int client_fd, MessageBuffer& buf, RequestContext* out, size_t* consumed)` | `kOk` / `kNeedMore` / `kError`. On `kOk`, `*out` owns strings |
-
-`GetAllData` → `RespDecode::DecodeArrayOfBulk` → `RequestContext::FromArgv`.
-
-### ProtocolExecutor
-
-| API | Signature | Notes |
-|-----|-----------|-------|
-| Constructor | `(shared_ptr<RespProtocolHandler>, DispatchCallback, WriteCallback, ErrorCallback)` | |
-| `OnBufferReadable` | `(int client_fd, MessageBuffer& buf)` | Loop until `kNeedMore` / `kError`; append each reply, then **one** `WriteCallback` per round |
-
----
-
-## Line Protocol vs RESP (Do Not Mix)
-
-| | Line protocol | RESP (this layer) |
-|--|---------------|-------------------|
-| Frame shape | Single line, ends at `\r\n` | Multi-line: `*<n>\r\n` + several `$<len>\r\n<body>\r\n` |
-| Buffer read | `MessageBuffer::GetDataUntilCRLF` | `GetAllData` (via `RespProtocolHandler`) |
-| Who decides "frame complete" | First `\r\n` found | `RespDecode` (`kOk` / `kNeedMore`) |
-| Consume | `ReadCompleted(line_len + 2)` | `ReadCompleted(consumed)` via `ProtocolExecutor` |
-| Use | Simple text / debugging | **Vemory command channel (only supported path)** |
-
----
-
-## Argument Representation: `std::string_view`
-
-`tokens[i]` from `RespDecode` points into the read buffer bulk body and is **not copied**.
-
-Constraints:
-
-- Views are invalid after `ReadCompleted`.
-- `RespProtocolHandler` copies into `RequestContext` before the executor consumes.
-
----
-
-## RespDecode / RespEncode / RespProtocolHandler
-
-Wire codec + buffer glue. Headers under `include/vemory/protocol/resp/`.
-
-| API | Notes |
-|-----|-------|
-| `RespDecode::DecodeArrayOfBulk` | Zero-copy `vector<string_view>` + `consumed` |
-| `RespProtocolHandler::TryParse` | `GetAllData` → decode → `FromArgv` → owned `RequestContext` |
-| `RespEncode::*` | Append reply frames to `string` |
+| `PING` `ECHO` | `AssistDispatcher` | no store |
 
 ---
 
 ## CommandType / RequestContext
 
-Wire verbs → enum; `RequestContext::FromArgv` maps tokens.
+| Command | Args | Reply |
+|---------|------|-------|
+| `VSET` | `<vector_blob> <user_key> <question> <answer>` | `+OK` or `-ERR …` |
+| `VGET` | `<query_vector_blob> <threshold>` | bulk `answer` or null bulk |
+| `VDEL` | `<user_key>` | `:1` / `:0` |
+| `SET` / `GET` / `DEL` | string KVS | as Redis-style |
+| `PING` / `ECHO` | assist | |
 
-| Command | Args |
-|---------|------|
-| `VADD` | `<key> VALUES <dim> <f1> … <fN> <element>` |
-| `VSIM` | `<key> ELE <element> [COUNT <n>] [WITHSCORES]` or `<key> VALUES <dim> <f1>… [COUNT <n>] [WITHSCORES]` |
-| `VDIM` | `<key>` |
-| `VEMB` | `<key> <element>` |
-| `VCARD` | `<key>` |
-| `SET` | `<key> <value>` (value in `element`) |
-| `GET` | `<key>` |
-| `DEL` | `<key>` |
-| `PING` | `[<message>]` (message in `element`; bare `PING` → `+PONG`) |
-| `ECHO` | `<message>` (message in `element`) |
+`vector_blob` / query blob: raw little-endian `float` bytes; `dim = len / sizeof(float)`.  
+`threshold`: cosine **distance** upper bound (hit iff best distance ≤ threshold).
 
-| Field (`RequestContext`) | Notes |
-|--------------------------|-------|
-| `client_fd` | For replies |
-| `cmd` | `CommandType` |
-| `key` | Key / vector set name |
-| `element` | Element label (`VADD` / `VSIM ELE` / `VEMB`), SET value, or PING/ECHO message |
-| `embed` | Floats for `VADD` / `VSIM VALUES` |
-| `count` | `VSIM` neighbor count (default 10) |
-| `with_scores` | `VSIM WITHSCORES` |
-| `vsim_mode` | `ELE` or `VALUES` |
-| `recv_time` | Set on successful `FromArgv` |
-
-This layer stops at an owned `RequestContext`. Vector set ops: [EmbedIndex](../Index/EmbedIndex.md).
+| Field | Notes |
+|-------|-------|
+| `vector_blob` | VSET/VGET binary floats |
+| `user_key` / `question` / `answer` | VSET / VDEL |
+| `threshold` | VGET distance gate |
+| `key` / `element` | SET/GET/DEL / PING/ECHO |
 
 ---
 
@@ -141,12 +68,10 @@ This layer stops at an owned `RequestContext`. Vector set ops: [EmbedIndex](../I
 |-----------|--------|--------|
 | ProtocolExecutor | `include/vemory/protocol/ProtocolExecutor.h` | `src/protocol/ProtocolExecutor.cc` |
 | RespProtocolHandler | `include/vemory/protocol/resp/RespProtocolHandler.h` | `src/protocol/resp/RespProtocolHandler.cc` |
-| RespDecode | `include/vemory/protocol/resp/RespDecode.h` | `src/protocol/resp/RespDecode.cc` |
-| RespEncode | `include/vemory/protocol/resp/RespEncode.h` | `src/protocol/resp/RespEncode.cc` |
 | CommandType | `include/vemory/protocol/CommandType.h` | `src/protocol/CommandType.cc` |
 | RequestContext | `include/vemory/protocol/RequestContext.h` | `src/protocol/RequestContext.cc` |
 | HandlerRegister | `include/vemory/protocol/dispatcher/HandlerRegister.h` | `src/protocol/dispatcher/HandlerRegister.cc` |
-| VectorDispatcher | `include/vemory/protocol/dispatcher/VectorDispatcher.h` | `src/protocol/dispatcher/VectorDispatcher.cc` |
+| VNodeDispatcher | `include/vemory/protocol/dispatcher/VNodeDispatcher.h` | `src/protocol/dispatcher/VNodeDispatcher.cc` |
 | KvsDispatcher | `include/vemory/protocol/dispatcher/KvsDispatcher.h` | `src/protocol/dispatcher/KvsDispatcher.cc` |
 | AssistDispatcher | `include/vemory/protocol/dispatcher/AssistDispatcher.h` | `src/protocol/dispatcher/AssistDispatcher.cc` |
 | CommandHandler | `include/vemory/protocol/dispatcher/CommandHandler.h` | `src/protocol/dispatcher/CommandHandler.cc` |

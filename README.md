@@ -4,7 +4,7 @@ English | [中文](README.zh-CN.md)
 
 RESP-speaking vector set server (Redis Vector Set–style subset). Talk to it with `redis-cli`.
 
-**v0.1.1 — early MVP.** Data is **in-memory only** (restart loses everything). Single-threaded epoll reactor. Command set is a **subset** of Redis Vector Set plus basic `SET`/`GET`/`DEL` — not a drop-in Redis replacement. Network / RESP parse path stabilized for pipeline workloads; see [`CHANGELOG.md`](CHANGELOG.md).
+**v0.1.1+ (toward 0.2)** — early MVP. Data is **in-memory only**. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
@@ -85,42 +85,33 @@ Other targets:
 | `make compile-commands` | Refresh `compile_commands.json` for clangd |
 | `make clean` | Remove `build/`, `bin/`, `generated/` |
 
-Entry point: [`src/Vemory.cc`](src/Vemory.cc). Dimension is set per key on the first `VADD`.
+Entry point: [`src/Vemory.cc`](src/Vemory.cc). Index dimension is locked on the first successful `VSET` (`dim = vector_blob_bytes / sizeof(float)`).
 
 ## Commands
 
-Wire format is Redis RESP. Subset of Redis Vector Set verbs:
+Wire format is Redis RESP (bulk strings are binary-safe). Semantic cache verbs:
 
 | Command | Args | Reply |
 |---------|------|-------|
-| `VADD` | `<key> VALUES <dim> <f1> … <fN> <element>` | integer `1` |
-| `VSIM` | `<key> ELE <element> [COUNT <n>] [WITHSCORES]` or `<key> VALUES <dim> <f1>…<fN> [COUNT <n>] [WITHSCORES]` | array of elements (or element/score pairs) |
-| `VDIM` | `<key>` | integer dim |
-| `VEMB` | `<key> <element>` | array of float strings |
-| `VCARD` | `<key>` | integer cardinality (`0` if key missing) |
+| `VSET` | `<vector_blob> <user_key> <question> <answer>` | `+OK` or `-ERR …` |
+| `VGET` | `<query_vector_blob> <threshold>` | bulk `answer`, or null bulk on miss |
+| `VDEL` | `<user_key>` | `:1` / `:0` |
 
-`COUNT` defaults to **10**. Scores are cosine similarity (`1 - distance`).
+`vector_blob` / query blob: raw little-endian `float32` bytes. `threshold` is a cosine **distance** upper bound (hit if best distance ≤ threshold). Also: `SET`/`GET`/`DEL`, `PING`/`ECHO`.
 
-Examples:
+Binary blobs are awkward in interactive `redis-cli`; prefer a RESP client library or unit tests for cache commands. String KVS still works with `redis-cli`.
 
-```bash
-redis-cli VADD docs VALUES 8 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 apple
-redis-cli VSIM docs VALUES 8 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 COUNT 3 WITHSCORES
-redis-cli VSIM docs ELE apple COUNT 3
-redis-cli VDIM docs
-redis-cli VEMB docs apple
-redis-cli VCARD docs
-```
+Note: `bench/smoke/vector.sh` / `vector_metrics.py` still target the removed Vector Set verbs and will be updated in a follow-up commit.
 
 ## Architecture
 
 ```
-redis-cli
+client
   → TcpServer / EventLoop (epoll)
     → ProtocolExecutor + RespProtocolHandler
       → CommandHandler
-        → VectorSetRegistry
-          → VectorSet (name↔id, vectors, USearchEmbedIndex)
+        → VNodeIndex (VNodeStorage + USearchEmbedIndex)
+        → KvStore
 ```
 
 Design notes by layer:

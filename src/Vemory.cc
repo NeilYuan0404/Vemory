@@ -7,7 +7,6 @@
 
 #include <spdlog/spdlog.h>
 
-#include "vemory/index/VectorSetRegistry.h"
 #include "vemory/net/EventLoop.h"
 #include "vemory/net/TcpConnection.h"
 #include "vemory/net/TcpServer.h"
@@ -15,6 +14,7 @@
 #include "vemory/protocol/ProtocolExecutor.h"
 #include "vemory/protocol/resp/RespProtocolHandler.h"
 #include "vemory/storage/KvStore.h"
+#include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Config.h"
 #include "vemory/util/Logging.h"
 
@@ -113,10 +113,10 @@ int main(int argc, char** argv) {
 
   EventLoop evloop;
   TcpServer server(evloop);
-  VectorSetRegistry registry(cfg.default_capacity);
+  VNodeIndex vnode_index(cfg.default_capacity);
   KvStore kv;
   kv.Reserve(cfg.kv_reserve);
-  CommandHandler commands(&registry, &kv);
+  CommandHandler commands(&vnode_index, &kv);
   auto protocol = std::make_shared<RespProtocolHandler>();
 
   server.Start(cfg.bind, cfg.port, [&commands, protocol](TcpConn::Ptr conn) {

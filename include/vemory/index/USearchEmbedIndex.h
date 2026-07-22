@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-// Usearch-backed ANN embed index. Keyed by the same uint16_t id as VNodeStorage.
+// Usearch-backed ANN embed index. Keyed by the same uint16_t id as VNodeIndex.
 // Search is kNN (not id lookup). Public header stays free of usearch types.
 class USearchEmbedIndex {
  public:

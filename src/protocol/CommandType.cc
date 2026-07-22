@@ -21,20 +21,14 @@ bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
 }  // namespace
 
 CommandType ParseCommandType(std::string_view name) {
-  if (EqualsIgnoreCase(name, "VADD")) {
-    return CommandType::kVadd;
+  if (EqualsIgnoreCase(name, "VSET")) {
+    return CommandType::kVset;
   }
-  if (EqualsIgnoreCase(name, "VSIM")) {
-    return CommandType::kVsim;
+  if (EqualsIgnoreCase(name, "VGET")) {
+    return CommandType::kVget;
   }
-  if (EqualsIgnoreCase(name, "VDIM")) {
-    return CommandType::kVdim;
-  }
-  if (EqualsIgnoreCase(name, "VEMB")) {
-    return CommandType::kVemb;
-  }
-  if (EqualsIgnoreCase(name, "VCARD")) {
-    return CommandType::kVcard;
+  if (EqualsIgnoreCase(name, "VDEL")) {
+    return CommandType::kVdel;
   }
   if (EqualsIgnoreCase(name, "SET")) {
     return CommandType::kSet;

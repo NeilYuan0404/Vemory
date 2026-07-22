@@ -6,11 +6,9 @@
 
 // Wire command names (case-insensitive).
 enum class CommandType : uint8_t {
-  kVadd = 0,
-  kVsim,
-  kVdim,
-  kVemb,
-  kVcard,
+  kVset = 0,
+  kVget,
+  kVdel,
   kSet,
   kDel,
   kGet,

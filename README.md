@@ -2,9 +2,9 @@
 
 English | [中文](README.zh-CN.md)
 
-RESP-speaking vector set server (Redis Vector Set–style subset). Talk to it with `redis-cli`.
+RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
 
-**v0.1.1+ (toward 0.2)** — early MVP. Data is **in-memory only**. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
+**v0.2.0** — early MVP. Data is **in-memory only**. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 

@@ -2,7 +2,11 @@
 
 All notable changes to Vemory are documented in this file.
 
-## [Unreleased] — toward 0.2.0
+## [Unreleased]
+
+## [0.2.0] — 2026-07-22
+
+Semantic cache as the primary wire API (breaking vs Redis Vector Set–style verbs).
 
 ### Breaking
 - Removed Redis Vector Set verbs: `VADD`, `VSIM`, `VDIM`, `VEMB`, `VCARD`
@@ -15,9 +19,17 @@ All notable changes to Vemory are documented in this file.
 
 ### Changed
 - Benches retargeted to binary `VSET` / `VGET` / `VDEL` (`bench/vemory_vec.py`, smoke + `vector_metrics.py` agree gate)
+- Protocol mapping renamed `FromArgv` → `FromTokens` (RESP array tokens)
 
 ### Notes
 - `VGET` threshold is cosine **distance** (not similarity)
+
+### Limits
+- No persistence / WAL — process exit clears all data
+- No auth; bind carefully for non-local use
+- Internal ANN / metadata ids are `uint16` (~65k entries)
+- No server-side embedding; clients send float blobs
+- Single global index; dimension locked on first successful `VSET`
 
 ## [0.1.1] — 2026-07-22
 

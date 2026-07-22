@@ -143,13 +143,27 @@ WSL2, debug `bin/vemory` on `:8989`, single event loop. Numbers are indicative o
 | SET | ~115k | |
 | GET | ~125k | |
 
-### Smoke — Vector (`DIM=8 CARD=100 QUERIES=50 THRESHOLD=0.2`)
+### Smoke — Vector (`DIM=8 CARD=1000 QUERIES=500 THRESHOLD=0.2`)
 
-Re-run `./bench/smoke/vector.sh` for current VSET/VGET/VDEL numbers.
+Run: `PORT=8989 ./bench/smoke/vector.sh`
+
+| Step | Result |
+|------|--------|
+| VSET 1000 | 1378.89 ms (725.2 ops/s) |
+| VGET 500 | 380.98 ms (1312.4 qps, hits=98/500) |
+| VDEL | e1 → 1 then 0; post-delete VGET miss |
 
 ### Vector metrics (`glove-25-angular`)
 
-Re-run `bench/vector_metrics.py` for `agree` / p50 / p99 / gated QPS.
+Run: `HOST=127.0.0.1 PORT=8989 bench/.venv/bin/python bench/vector_metrics.py`  
+(`CARD=10000`, `QUERIES=200`, `THRESHOLD=0.2`, dim=25)
+
+| Metric | Value |
+|--------|------:|
+| agree | 1.0000 |
+| latency p50 / p99 | 1.83 ms / 2.81 ms |
+| QPS@agree≥0.95 | 536.2 |
+| VSET load | 329.4 ops/s |
 
 ## Notes
 

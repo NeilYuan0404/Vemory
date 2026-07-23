@@ -4,7 +4,7 @@
 
 兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串可用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
 
-**v0.2.0 — 早期 MVP。** 可选多文件 RDB 快照（`SAVE` / `persistence.dir`）；无 WAL。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v0.3.0 — 早期 MVP。** 可选多文件 RDB 快照（`SAVE` / `persistence.dir`）；无 WAL。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 
@@ -136,7 +136,7 @@ SET 走 `redis-benchmark`（`c=1 p=1`）；SAVE 在 chunk 之间用 `redis-cli` 
 
 向量为小端 `float32` 原始字节；`threshold` 为余弦**距离**上限。另有 `SET`/`GET`/`DEL`、`PING`/`ECHO`、`SAVE`（默认写入 `data/`）。
 
-二进制 blob 不适合手敲 `redis-cli`；缓存命令请用客户端库、压测脚本（`bench/smoke/vector.sh`、`vector_metrics.py`）或单测。字符串 KVS 与 `SAVE` 仍可用 `redis-cli`。
+二进制 blob 不适合手敲 `redis-cli`；缓存命令请用客户端库、压测脚本（`bench/smoke/vector.sh`、`bench/smoke/vector_rdb.sh`、`vector_metrics.py`）或单测。字符串 KVS 与 `SAVE` 仍可用 `redis-cli`。
 
 ## 架构
 

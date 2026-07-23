@@ -12,5 +12,6 @@
 # RDB snapshots (keep directory via data/.gitkeep)
 /data/dump.*
 /data/*.tmp
+/demo/data/
 __pycache__/
 *.pyc

@@ -54,28 +54,29 @@ redis-cli -p 8989
 ./bench/smoke/vector.sh    # VSET 灌库 + VGET + VDEL 抽检（redis-py）
 python3 bench/pipeline_bench.py                  # c=1 SET/GET：Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95（见 bench/README.md）
+HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE 频率 vs SET QPS
 ```
 
 ### 最近一次 pipeline 结果
 
 运行：`python3 bench/pipeline_bench.py`（Vemory `127.0.0.1:8989`，Redis `127.0.0.1:6379`）
 
-基线（`c=1`，`p=1`，`n=10000`）：
+基线（`c=1`，`p=1`，`n=10000`；release `bin/vemory`）：
 
 | Server | SET (rps) | GET (rps) |
 |--------|-----------|-----------|
-| Vemory | 9832.84 | 10559.66 |
-| Redis | 8635.58 | 9433.96 |
+| Vemory | 13531.80 | 13404.83 |
+| Redis | 12437.81 | 13531.80 |
 
 Pipeline 扫描（`c=1`）：
 
 | P | n | Vemory SET | Redis SET | Vemory GET | Redis GET |
 |---|---:|-----------:|----------:|-----------:|----------:|
-| 10 | 100000 | 110741.97 | 72621.64 | 71022.73 | 74682.60 |
-| 20 | 100000 | 118203.30 | 71073.21 | 112866.82 | 112359.55 |
-| 40 | 1000000 | 142979.70 | 100050.02 | 111358.58 | 141023.83 |
-| 100 | 1000000 | 220312.84 | 169376.70 | 197863.08 | 180929.98 |
-| 160 | 1000000 | 254777.08 | 190114.06 | 215656.67 | 261096.61 |
+| 10 | 100000 | 105820.11 | 87719.30 | 89445.44 | 96339.12 |
+| 20 | 100000 | 165289.25 | 130208.34 | 146842.88 | 152905.20 |
+| 40 | 5000000 | 225641.95 | 147999.05 | 194552.52 | 198720.25 |
+| 100 | 5000000 | 206568.89 | 166284.22 | 179649.31 | 184352.19 |
+| 160 | 5000000 | 219934.91 | 170160.62 | 201126.30 | 200980.78 |
 
 详见 [`bench/README.md`](bench/README.md)。
 
@@ -94,6 +95,21 @@ Pipeline 扫描（`c=1`）：
 | VSET 灌库 | 329.4 ops/s |
 
 仅供参考——单线程事件循环，非多客户端打满压测。
+
+### 最近一次 RDB SAVE vs SET QPS
+
+运行：`HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py`  
+（release `bin/vemory` 监听 `:8989`；`CLIENT=benchmark`，`N=1000000`，`SAVE_BUSY=skip`）
+
+| interval | saves_ok | saves_skipped | elapsed_s | set_qps |
+|----------|---------:|--------------:|----------:|--------:|
+| baseline | 0 | 0 | 74.773 | 13373.8 |
+| 1000000 | 1 | 0 | 74.965 | 13339.6 |
+| 100000 | 10 | 0 | 75.568 | 13233.1 |
+| 10000 | 100 | 0 | 79.685 | 12549.5 |
+| 1000 | 984 | 16 | 111.473 | 8970.8 |
+
+SET 走 `redis-benchmark`（`c=1 p=1`）；SAVE 在 chunk 之间用 `redis-cli` 触发。仅供参考。
 
 其他目标：
 

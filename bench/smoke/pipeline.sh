@@ -12,7 +12,7 @@ PIPELINES="${PIPELINES:-10 20 40 100 160}"
 
 N_P1="${N_P1:-10000}"
 N_MID="${N_MID:-100000}"    # P=10,20
-N_HIGH="${N_HIGH:-1000000}" # P=40,100,160
+N_HIGH="${N_HIGH:-5000000}" # P=40,100,160
 
 if ! command -v redis-benchmark >/dev/null 2>&1; then
   echo "error: redis-benchmark not found (install redis-tools)" >&2

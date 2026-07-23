@@ -22,7 +22,7 @@ D = int(os.environ.get("D", "64"))
 PIPELINES = os.environ.get("PIPELINES", "10 20 40 100 160")
 N_P1 = int(os.environ.get("N_P1", "10000"))
 N_MID = int(os.environ.get("N_MID", "100000"))
-N_HIGH = int(os.environ.get("N_HIGH", "1000000"))
+N_HIGH = int(os.environ.get("N_HIGH", "5000000"))
 
 
 def die(msg: str, code: int = 1) -> None:

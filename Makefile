@@ -1,11 +1,11 @@
 CXX      := g++
 PROTOC  := protoc
 
-# Build mode: debug (default) | release | test
-#   debug   — -g, bin/vemory
+# Build mode: release (default) | debug | test
 #   release — -O2 -DNDEBUG, bin/vemory
+#   debug   — -g, bin/vemory
 #   test    — -g, bin/testcase (tests/testcase.cc)
-MODE ?= debug
+MODE ?= release
 
 ifeq ($(MODE),release)
   MODE_FLAGS := -O2 -DNDEBUG

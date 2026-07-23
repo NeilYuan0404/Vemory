@@ -39,7 +39,7 @@ Also prints single-client, no-pipeline baselines for PING/ECHO and SET/GET.
 
 - Pipeline depths **10 / 20 / 40 / 100 / 160**
 - Prints `p=1` baseline, then a sweep table
-- Request count: **p=1 → 10k**, **p=10/20 → 100k**, **p=40/100/160 → 1M**
+- Request count: **p=1 → 10k**, **p=10/20 → 100k**, **p=40/100/160 → 5M**
 
 For Vemory vs Redis compare, use [`pipeline_bench.py`](pipeline_bench.py).
 
@@ -54,7 +54,7 @@ PIPELINES="10 40 160" PORT=8989 ./bench/smoke/pipeline.sh
 | `HOST` / `PORT` | `127.0.0.1` / `6379` | Vemory |
 | `N_P1` | `10000` | Requests when `P=1` (baselines) |
 | `N_MID` | `100000` | Requests when `P=10` or `20` |
-| `N_HIGH` | `1000000` | Requests when `P=40`, `100`, or `160` |
+| `N_HIGH` | `5000000` | Requests when `P=40`, `100`, or `160` |
 | `R` | `10000` | Random keyspace (`-r`) |
 | `D` | `64` | SET value size in bytes (`-d`) |
 | `PIPELINES` | `10 20 40 100 160` | Pipeline depths (`-P`) |
@@ -94,7 +94,7 @@ PIPELINES="10 40 160" python3 bench/pipeline_bench.py
 |-----|---------|---------|
 | `VEMORY_HOST` / `VEMORY_PORT` | `127.0.0.1` / `8989` | Vemory |
 | `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | Redis |
-| `N_P1` / `N_MID` / `N_HIGH` | `10000` / `100000` / `1000000` | Request counts by `P` |
+| `N_P1` / `N_MID` / `N_HIGH` | `10000` / `100000` / `5000000` | Request counts by `P` |
 | `R` | `10000` | Random keyspace (`-r`) |
 | `D` | `64` | SET value size (`-d`) |
 | `PIPELINES` | `10 20 40 100 160` | Pipeline depths (`-P`) |
@@ -138,6 +138,7 @@ Measures how often calling `SAVE` during a long `SET` stream affects SET through
 - Every **`interval`** SETs, attempt **`SAVE`** once
 - Default intervals: `1000000 100000 10000 1000` plus a **baseline** with no SAVE
 - Reports `saves_ok`, `saves_skipped`, wall time, **SET QPS**
+- Default **`CLIENT=benchmark`**: `redis-benchmark` SET (`c=1 p=1`, same style as pipeline baseline ~10k rps) + `redis-cli SAVE` between chunks; `CLIENT=py` keeps the legacy redis-py loop (~2–3k rps)
 
 **Busy policy** (previous background dump still running):
 
@@ -164,7 +165,9 @@ SAVE_BUSY=wait INTERVALS="100000 10000" PORT=8989 bench/.venv/bin/python bench/r
 | `INTERVALS` | `1000000 100000 10000 1000` | SAVE every N SETs |
 | `INCLUDE_BASELINE` | `1` | Run a no-SAVE round first |
 | `SAVE_BUSY` | `skip` | `skip` or `wait` when dump in progress |
-| `VALUE` | 16×`x` | SET value payload |
+| `CLIENT` | `benchmark` | `benchmark` (redis-benchmark + redis-cli) or `py` |
+| `R` / `D` | `10000` / `64` | Keyspace / value size for `CLIENT=benchmark` |
+| `VALUE` | 16×`x` | SET payload when `CLIENT=py` only |
 | `WAIT_SLEEP_S` | `0.01` | Sleep between retries if `SAVE_BUSY=wait` |
 
 ## Sample results (local, indicative)
@@ -201,6 +204,19 @@ Run: `HOST=127.0.0.1 PORT=8989 bench/.venv/bin/python bench/vector_metrics.py`
 | latency p50 / p99 | 1.83 ms / 2.81 ms |
 | QPS@agree≥0.95 | 536.2 |
 | VSET load | 329.4 ops/s |
+
+### RDB SAVE vs SET QPS (`rdb_save_bench.py`)
+
+Run: `HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py`  
+(release `bin/vemory` on `:8989`; `CLIENT=benchmark`, `N=1000000`, `SAVE_BUSY=skip`)
+
+| interval | saves_ok | saves_skipped | elapsed_s | set_qps |
+|----------|---------:|--------------:|----------:|--------:|
+| baseline | 0 | 0 | 74.773 | 13373.8 |
+| 1000000 | 1 | 0 | 74.965 | 13339.6 |
+| 100000 | 10 | 0 | 75.568 | 13233.1 |
+| 10000 | 100 | 0 | 79.685 | 12549.5 |
+| 1000 | 984 | 16 | 111.473 | 8970.8 |
 
 ## Notes
 

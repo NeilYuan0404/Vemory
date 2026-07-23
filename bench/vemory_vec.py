@@ -47,3 +47,10 @@ def vget(client: redis.Redis, blob: bytes, threshold: float) -> Optional[bytes]:
 def vdel(client: redis.Redis, user_key: str) -> int:
     reply = client.execute_command("VDEL", user_key)
     return int(reply)
+
+
+def save(client: redis.Redis) -> None:
+    """Issue SAVE (+OK). redis-py may map +OK → True."""
+    reply = client.execute_command("SAVE")
+    if reply not in (b"OK", True, "OK"):
+        raise RuntimeError(f"SAVE unexpected reply: {reply!r}")

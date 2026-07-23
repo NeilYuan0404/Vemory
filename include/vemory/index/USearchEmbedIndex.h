@@ -39,6 +39,10 @@ class USearchEmbedIndex {
 
   Status Del(uint16_t id);
 
+  // Persist / restore the underlying usearch index (vectors + graph).
+  Status Save(const char* path) const;
+  Status Load(const char* path);
+
   std::size_t dimensions() const { return dimensions_; }
 
  private:

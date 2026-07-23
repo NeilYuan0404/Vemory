@@ -4,7 +4,7 @@ English | [中文](README.zh-CN.md)
 
 RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
 
-**v0.2.0** — early MVP. Data is **in-memory only**. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
+**v0.2.0** — early MVP. Optional multi-file RDB snapshot (`SAVE` / `persistence.dir`); no WAL. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
@@ -39,8 +39,12 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `logging` | `level` | `info` | `trace`/`debug`/`info`/`warn`/`error`/`critical`/`off` |
 | `storage` | `kv_reserve` | `100000` | `KvStore` pre-reserve |
 | `index` | `default_capacity` | `1024` | Initial vector-set capacity |
+| `persistence` | `dir` | `data` | RDB snapshot directory; empty disables `SAVE` |
+| `persistence` | `load_on_startup` | `false` | Load `dump.*` from `dir` on startup |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
+
+Snapshot files (multi-file) under `data/` by default: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`. `SAVE` forks a background writer (no WAL).
 
 Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 
@@ -113,7 +117,7 @@ Wire format is Redis RESP (bulk strings are binary-safe). Semantic cache verbs:
 | `VGET` | `<query_vector_blob> <threshold>` | bulk `answer`, or null bulk on miss |
 | `VDEL` | `<user_key>` | `:1` / `:0` |
 
-`vector_blob` / query blob: raw little-endian `float32` bytes. `threshold` is a cosine **distance** upper bound (hit if best distance ≤ threshold). Also: `SET`/`GET`/`DEL`, `PING`/`ECHO`.
+`vector_blob` / query blob: raw little-endian `float32` bytes. `threshold` is a cosine **distance** upper bound (hit if best distance ≤ threshold). Also: `SET`/`GET`/`DEL`, `PING`/`ECHO`, `SAVE` (writes under `data/` by default).
 
 Binary blobs are awkward in interactive `redis-cli`; prefer a RESP client library, benches (`bench/smoke/vector.sh`, `vector_metrics.py`), or unit tests for cache commands. String KVS still works with `redis-cli`.
 
@@ -126,6 +130,7 @@ client
       → CommandHandler
         → VNodeIndex (VNodeStorage + USearchEmbedIndex)
         → KvStore
+        → SnapshotManager
 ```
 
 Design notes by layer:
@@ -136,6 +141,7 @@ Design notes by layer:
 | Message buffer | [`docs/Network/MessageBuffer.md`](docs/Network/MessageBuffer.md) |
 | RESP / commands | [`docs/Protocol/Protocol.md`](docs/Protocol/Protocol.md) |
 | Storage | [`docs/Storage/StorageLayer.md`](docs/Storage/StorageLayer.md) |
+| Persist / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
 | Embed index / vector sets | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
-Layout: public headers under `include/vemory/`, sources under `src/`, schema in `proto/VNode.proto` (codec for future replication).
+Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/`), schema in `proto/VNode.proto` (codec for future replication).

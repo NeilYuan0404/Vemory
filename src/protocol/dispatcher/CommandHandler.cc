@@ -2,10 +2,12 @@
 
 #include "vemory/protocol/dispatcher/AssistDispatcher.h"
 #include "vemory/protocol/dispatcher/KvsDispatcher.h"
+#include "vemory/protocol/dispatcher/PersistDispatcher.h"
 #include "vemory/protocol/dispatcher/VNodeDispatcher.h"
 
-CommandHandler::CommandHandler(VNodeIndex* vnode_index, KvStore* kv)
-    : vnode_index_(vnode_index), kv_(kv) {
+CommandHandler::CommandHandler(VNodeIndex* vnode_index, KvStore* kv,
+                               SnapshotManager* snapshot)
+    : vnode_index_(vnode_index), kv_(kv), snapshot_(snapshot) {
   register_.Register(CommandType::kPing, AssistDispatcher, nullptr);
   register_.Register(CommandType::kEcho, AssistDispatcher, nullptr);
   if (vnode_index_ != nullptr) {
@@ -17,6 +19,9 @@ CommandHandler::CommandHandler(VNodeIndex* vnode_index, KvStore* kv)
     register_.Register(CommandType::kSet, KvsDispatcher, kv_);
     register_.Register(CommandType::kDel, KvsDispatcher, kv_);
     register_.Register(CommandType::kGet, KvsDispatcher, kv_);
+  }
+  if (snapshot_ != nullptr) {
+    register_.Register(CommandType::kSave, PersistDispatcher, snapshot_);
   }
 }
 

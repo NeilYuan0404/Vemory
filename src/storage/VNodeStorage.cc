@@ -25,6 +25,18 @@ VNodeStorage::Status VNodeStorage::Put(VNode node, uint16_t* out_id) {
   return Status::kOk;
 }
 
+VNodeStorage::Status VNodeStorage::Restore(VNode node) {
+  if (node.user_key.empty() || node.id == 0) {
+    return Status::kBadValue;
+  }
+  if (by_id_.count(node.id) != 0 || by_user_key_.count(node.user_key) != 0) {
+    return Status::kBadValue;
+  }
+  by_user_key_.emplace(node.user_key, node.id);
+  by_id_.emplace(node.id, std::move(node));
+  return Status::kOk;
+}
+
 VNodeStorage::Status VNodeStorage::GetById(uint16_t id, VNode* out) const {
   if (out == nullptr) {
     return Status::kBadValue;
@@ -57,4 +69,22 @@ VNodeStorage::Status VNodeStorage::DelByUserKey(std::string_view user_key) {
   by_id_.erase(it->second);
   by_user_key_.erase(it);
   return Status::kOk;
+}
+
+void VNodeStorage::Clear() {
+  by_id_.clear();
+  by_user_key_.clear();
+  next_id_ = 1;
+}
+
+void VNodeStorage::ForEach(
+    const std::function<bool(uint16_t, const VNode&)>& fn) const {
+  if (!fn) {
+    return;
+  }
+  for (const auto& kv : by_id_) {
+    if (!fn(kv.first, kv.second)) {
+      return;
+    }
+  }
 }

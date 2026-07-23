@@ -9,5 +9,8 @@
 /bench/data/*.hdf5
 /bench/data/*.hdf5.partial
 /bench/.venv/
+# RDB snapshots (keep directory via data/.gitkeep)
+/data/dump.*
+/data/*.tmp
 __pycache__/
 *.pyc

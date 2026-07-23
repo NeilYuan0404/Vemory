@@ -7,8 +7,9 @@ Wire commands:
 - Semantic cache (live): `VSET` / `VGET` / `VDEL` → `VNodeIndex`
 - KVS (live): `SET` / `GET` / `DEL` → `KvStore`
 - Assist (live): `PING` / `ECHO`
+- Persistence (live): `SAVE` → `SnapshotManager` (fork background dump)
 
-I/O: [`../Network/Reactor.md`](../Network/Reactor.md); storage: [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md); ANN: [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md).
+I/O: [`../Network/Reactor.md`](../Network/Reactor.md); storage: [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md); persist: [`../Persist/Snapshot.md`](../Persist/Snapshot.md); ANN: [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md).
 
 ---
 
@@ -25,6 +26,7 @@ TcpConn::ReadCallback
                    → VNodeDispatcher → VNodeIndex
                    → KvsDispatcher    → KvStore
                    → AssistDispatcher → PING / ECHO
+                   → PersistDispatcher → SnapshotManager
     → WriteCallback(batch) once  // pipeline: one Send per read round
 ```
 
@@ -37,6 +39,7 @@ TcpConn::ReadCallback
 | `VSET` `VGET` `VDEL` | `VNodeDispatcher` | `arg` = `VNodeIndex*` |
 | `SET` `GET` `DEL` | `KvsDispatcher` | `arg` = `KvStore*` |
 | `PING` `ECHO` | `AssistDispatcher` | no store |
+| `SAVE` | `PersistDispatcher` | `arg` = `SnapshotManager*` |
 
 ---
 
@@ -49,6 +52,7 @@ TcpConn::ReadCallback
 | `VDEL` | `<user_key>` | `:1` / `:0` |
 | `SET` / `GET` / `DEL` | string KVS | as Redis-style |
 | `PING` / `ECHO` | assist | |
+| `SAVE` | (none) | `+OK` or `-ERR …` (fork background RDB) |
 
 `vector_blob` / query blob: raw little-endian `float` bytes; `dim = len / sizeof(float)`.  
 `threshold`: cosine **distance** upper bound (hit iff best distance ≤ threshold).
@@ -74,4 +78,5 @@ TcpConn::ReadCallback
 | VNodeDispatcher | `include/vemory/protocol/dispatcher/VNodeDispatcher.h` | `src/protocol/dispatcher/VNodeDispatcher.cc` |
 | KvsDispatcher | `include/vemory/protocol/dispatcher/KvsDispatcher.h` | `src/protocol/dispatcher/KvsDispatcher.cc` |
 | AssistDispatcher | `include/vemory/protocol/dispatcher/AssistDispatcher.h` | `src/protocol/dispatcher/AssistDispatcher.cc` |
+| PersistDispatcher | `include/vemory/protocol/dispatcher/PersistDispatcher.h` | `src/protocol/dispatcher/PersistDispatcher.cc` |
 | CommandHandler | `include/vemory/protocol/dispatcher/CommandHandler.h` | `src/protocol/dispatcher/CommandHandler.cc` |

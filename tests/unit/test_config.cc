@@ -46,6 +46,8 @@ TEST(Config, Defaults) {
   EXPECT_EQ(cfg.log_level, "info");
   EXPECT_EQ(cfg.kv_reserve, 100000u);
   EXPECT_EQ(cfg.default_capacity, 1024u);
+  EXPECT_EQ(cfg.persistence_dir, "data");
+  EXPECT_FALSE(cfg.load_on_startup);
 }
 
 TEST(Config, LoadHappyPath) {

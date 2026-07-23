@@ -27,6 +27,7 @@ TEST(CommandType, Parse_WireNames) {
   EXPECT_EQ(ParseCommandType("GET"), CommandType::kGet);
   EXPECT_EQ(ParseCommandType("PING"), CommandType::kPing);
   EXPECT_EQ(ParseCommandType("ECHO"), CommandType::kEcho);
+  EXPECT_EQ(ParseCommandType("SAVE"), CommandType::kSave);
   EXPECT_EQ(ParseCommandType("vset"), CommandType::kVset);
   EXPECT_EQ(ParseCommandType("VADD"), CommandType::kUnknown);
   EXPECT_EQ(ParseCommandType("VSIM"), CommandType::kUnknown);

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@ class VNodeIndex {
     kBadVectorSize,  // len % sizeof(float) != 0 or empty
     kDimMismatch,
     kIndexInitFailed,
+    kIoError,
     kError,
   };
 
@@ -36,6 +38,15 @@ class VNodeIndex {
 
   std::size_t dimensions() const { return dim_; }
   bool ready() const { return index_ != nullptr; }
+  std::size_t node_count() const { return storage_.size(); }
+  uint16_t next_id() const { return storage_.next_id(); }
+
+  // Snapshot helpers (nodes file + usearch file).
+  Status DumpNodes(FILE* fp) const;
+  Status LoadNodes(FILE* fp, uint64_t node_count, uint16_t next_id);
+  Status SaveIndex(const char* path) const;
+  Status LoadIndex(const char* path, std::size_t dim);
+  void Clear();
 
  private:
   static bool ParseFloatBlob(std::string_view blob, const float** out_data,

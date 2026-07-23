@@ -48,7 +48,23 @@ bool ParseUint(std::string_view text, unsigned long long* out) {
 
 bool IsKnownSection(const std::string& section) {
   return section == "server" || section == "logging" || section == "storage" ||
-         section == "index";
+         section == "index" || section == "persistence";
+}
+
+bool ParseBool(std::string_view text, bool* out) {
+  if (out == nullptr) {
+    return false;
+  }
+  const std::string lower = ToLower(std::string(text));
+  if (lower == "true" || lower == "1" || lower == "yes" || lower == "on") {
+    *out = true;
+    return true;
+  }
+  if (lower == "false" || lower == "0" || lower == "no" || lower == "off") {
+    *out = false;
+    return true;
+  }
+  return false;
 }
 
 bool ApplyKey(Config* cfg, const std::string& section, const std::string& key,
@@ -112,6 +128,22 @@ bool ApplyKey(Config* cfg, const std::string& section, const std::string& key,
         return false;
       }
       cfg->default_capacity = static_cast<std::size_t>(v);
+      return true;
+    }
+  } else if (section == "persistence") {
+    if (key == "dir") {
+      cfg->persistence_dir = value;
+      return true;
+    }
+    if (key == "load_on_startup") {
+      bool v = false;
+      if (!ParseBool(value, &v)) {
+        if (error != nullptr) {
+          *error = "invalid persistence.load_on_startup: " + value;
+        }
+        return false;
+      }
+      cfg->load_on_startup = v;
       return true;
     }
   }

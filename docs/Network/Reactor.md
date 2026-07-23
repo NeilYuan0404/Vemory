@@ -101,5 +101,6 @@ server.Start(port, [&](TcpConn::Ptr conn) {
 | This doc | I/O, connections, event loop |
 | [`MessageBuffer.md`](MessageBuffer.md) | Userspace read buffer |
 | [`Protocol.md`](Protocol.md) | Protocol hook, RESP, `RequestContext` |
-| [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md) | `VNodeStorage`, `ProtobufVNodeCodec` (replication; unused by commands) |
+| [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md) | `KvStore`, `VNodeStorage`, `ProtobufVNodeCodec` |
+| [`../Persist/Snapshot.md`](../Persist/Snapshot.md) | `SnapshotManager` (RDB SAVE/load) |
 | [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md) | `USearchEmbedIndex`, `VNodeIndex` |

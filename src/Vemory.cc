@@ -14,6 +14,7 @@
 #include "vemory/protocol/ProtocolExecutor.h"
 #include "vemory/protocol/resp/RespProtocolHandler.h"
 #include "vemory/storage/KvStore.h"
+#include "vemory/persist/SnapshotManager.h"
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Config.h"
 #include "vemory/util/Logging.h"
@@ -116,7 +117,23 @@ int main(int argc, char** argv) {
   VNodeIndex vnode_index(cfg.default_capacity);
   KvStore kv;
   kv.Reserve(cfg.kv_reserve);
-  CommandHandler commands(&vnode_index, &kv);
+  SnapshotManager snapshot(&vnode_index, &kv, cfg.persistence_dir);
+
+  if (cfg.load_on_startup && !cfg.persistence_dir.empty()) {
+    const auto st = snapshot.Load();
+    if (st == SnapshotManager::Status::kOk) {
+      spdlog::info("Loaded snapshot from {}", cfg.persistence_dir);
+    } else if (st == SnapshotManager::Status::kIoError) {
+      spdlog::warn("No usable snapshot in {} (starting empty)",
+                   cfg.persistence_dir);
+    } else {
+      spdlog::error("Failed to load snapshot from {} (status={})",
+                    cfg.persistence_dir, static_cast<int>(st));
+      return EXIT_FAILURE;
+    }
+  }
+
+  CommandHandler commands(&vnode_index, &kv, &snapshot);
   auto protocol = std::make_shared<RespProtocolHandler>();
 
   server.Start(cfg.bind, cfg.port, [&commands, protocol](TcpConn::Ptr conn) {

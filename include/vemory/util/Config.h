@@ -15,6 +15,9 @@ struct Config {
   std::string log_level = "info";
   std::size_t kv_reserve = 100000;
   std::size_t default_capacity = 1024;
+  // Snapshot directory; empty disables SAVE. Default: data/
+  std::string persistence_dir = "data";
+  bool load_on_startup = false;
 
   // Soft issues from the last LoadConfig (unknown keys/sections).
   std::vector<std::string> warnings;

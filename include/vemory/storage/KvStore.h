@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -12,6 +13,7 @@ class KvStore {
     kOk = 0,
     kNotFound,
     kBadValue,  // empty key / null out
+    kIoError,
   };
 
   // Insert or replace. Empty value is allowed; empty key is not.
@@ -26,6 +28,12 @@ class KvStore {
   void Reserve(std::size_t n) { map_.reserve(n); }
 
   std::size_t size() const { return map_.size(); }
+
+  void Clear() { map_.clear(); }
+
+  // Binary dump: uint64 count + (u32 key_len, key, u32 val_len, val)*
+  Status Dump(FILE* fp) const;
+  Status Load(FILE* fp);
 
  private:
   std::unordered_map<std::string, std::string> map_;

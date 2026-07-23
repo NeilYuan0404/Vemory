@@ -45,5 +45,8 @@ CommandType ParseCommandType(std::string_view name) {
   if (EqualsIgnoreCase(name, "ECHO")) {
     return CommandType::kEcho;
   }
+  if (EqualsIgnoreCase(name, "SAVE")) {
+    return CommandType::kSave;
+  }
   return CommandType::kUnknown;
 }

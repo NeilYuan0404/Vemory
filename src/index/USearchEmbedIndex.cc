@@ -128,3 +128,26 @@ USearchEmbedIndex::Status USearchEmbedIndex::usearchDel(uint16_t id) {
   }
   return Status::kOk;
 }
+
+USearchEmbedIndex::Status USearchEmbedIndex::Save(const char* path) const {
+  if (path == nullptr || path[0] == '\0' || !impl_) {
+    return Status::kBadValue;
+  }
+  auto result = impl_->index.save(path);
+  return result ? Status::kOk : Status::kError;
+}
+
+USearchEmbedIndex::Status USearchEmbedIndex::Load(const char* path) {
+  if (path == nullptr || path[0] == '\0') {
+    return Status::kBadValue;
+  }
+  auto made = index_dense_t::make(path, /*view=*/false);
+  if (!made) {
+    return Status::kError;
+  }
+  impl_ = std::make_unique<Impl>();
+  impl_->index = std::move(made.index);
+  dimensions_ = impl_->index.dimensions();
+  capacity_ = impl_->index.capacity() == 0 ? 1 : impl_->index.capacity();
+  return Status::kOk;
+}

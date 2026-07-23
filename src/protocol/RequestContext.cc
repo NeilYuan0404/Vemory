@@ -161,6 +161,14 @@ RequestContext::Status RequestContext::FromTokens(
       out->recv_time = std::chrono::steady_clock::now();
       return Status::kOk;
     }
+    case CommandType::kSave: {
+      if (tokens.size() != 1) {
+        return fail(Status::kWrongArity);
+      }
+      ClearOut(out, client_fd, cmd);
+      out->recv_time = std::chrono::steady_clock::now();
+      return Status::kOk;
+    }
     case CommandType::kUnknown:
       break;
   }

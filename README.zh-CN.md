@@ -4,7 +4,7 @@
 
 兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串可用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
 
-**v0.2.0 — 早期 MVP。** 数据**仅存内存**。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v0.2.0 — 早期 MVP。** 可选多文件 RDB 快照（`SAVE` / `persistence.dir`）；无 WAL。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 
@@ -39,8 +39,12 @@ redis-cli -p 8989
 | `logging` | `level` | `info` | `trace`/`debug`/`info`/`warn`/`error`/`critical`/`off` |
 | `storage` | `kv_reserve` | `100000` | `KvStore` 预留容量 |
 | `index` | `default_capacity` | `1024` | 向量集合初始容量 |
+| `persistence` | `dir` | `data` | RDB 快照目录；空则 `SAVE` 不可用 |
+| `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.*` |
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
+
+快照文件（多文件）默认在 `data/`：`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`。`SAVE` 为 fork 后台写盘（无 WAL）。
 
 压测（服务端需已启动；依赖 `redis-benchmark` / `redis-cli`）：
 
@@ -113,9 +117,9 @@ Pipeline 扫描（`c=1`）：
 | `VGET` | `<query_vector_blob> <threshold>` | bulk `answer`，未命中为 null bulk |
 | `VDEL` | `<user_key>` | `:1` / `:0` |
 
-向量为小端 `float32` 原始字节；`threshold` 为余弦**距离**上限。另有 `SET`/`GET`/`DEL`、`PING`/`ECHO`。
+向量为小端 `float32` 原始字节；`threshold` 为余弦**距离**上限。另有 `SET`/`GET`/`DEL`、`PING`/`ECHO`、`SAVE`（默认写入 `data/`）。
 
-二进制 blob 不适合手敲 `redis-cli`；缓存命令请用客户端库、压测脚本（`bench/smoke/vector.sh`、`vector_metrics.py`）或单测。字符串 KVS 仍可用 `redis-cli`。
+二进制 blob 不适合手敲 `redis-cli`；缓存命令请用客户端库、压测脚本（`bench/smoke/vector.sh`、`vector_metrics.py`）或单测。字符串 KVS 与 `SAVE` 仍可用 `redis-cli`。
 
 ## 架构
 
@@ -126,6 +130,7 @@ client
       → CommandHandler
         → VNodeIndex (VNodeStorage + USearchEmbedIndex)
         → KvStore
+        → SnapshotManager
 ```
 
 各层设计说明：
@@ -136,6 +141,7 @@ client
 | 消息缓冲 | [`docs/Network/MessageBuffer.md`](docs/Network/MessageBuffer.md) |
 | RESP / 命令 | [`docs/Protocol/Protocol.md`](docs/Protocol/Protocol.md) |
 | 存储 | [`docs/Storage/StorageLayer.md`](docs/Storage/StorageLayer.md) |
+| 持久化 / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
 | 嵌入索引 / 向量集合 | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
-目录布局：公开头文件在 `include/vemory/`，源码在 `src/`，schema 在 `proto/VNode.proto`（供后续复制的编解码）。
+目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`），schema 在 `proto/VNode.proto`（供后续复制的编解码）。

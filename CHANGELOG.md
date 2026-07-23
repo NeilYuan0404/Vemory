@@ -4,6 +4,19 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Multi-file RDB snapshot: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`
+- `SAVE` command (fork background dump via `SnapshotManager`)
+- INI `[persistence]` `dir` + `load_on_startup`
+
+### Changed
+- Moved `SnapshotManager` from `storage/` to `persist/` (`include/vemory/persist/`, `src/persist/`)
+- Default snapshot directory is `data/` (`persistence.dir`)
+
+### Limits
+- No WAL / AOF; crash may lose writes since last successful SAVE
+- Snapshot format is Vemory-specific (not Redis RDB-compatible)
+
 ## [0.2.0] — 2026-07-22
 
 Semantic cache as the primary wire API (breaking vs Redis Vector Set–style verbs).
@@ -25,7 +38,6 @@ Semantic cache as the primary wire API (breaking vs Redis Vector Set–style ver
 - `VGET` threshold is cosine **distance** (not similarity)
 
 ### Limits
-- No persistence / WAL — process exit clears all data
 - No auth; bind carefully for non-local use
 - Internal ANN / metadata ids are `uint16` (~65k entries)
 - No server-side embedding; clients send float blobs

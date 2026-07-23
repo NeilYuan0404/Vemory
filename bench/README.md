@@ -4,7 +4,7 @@ Requires a running server (`./bin/vemory` or `./bin/vemory <port>`).
 
 Default: `HOST=127.0.0.1`, `PORT=6379`.
 
-Smoke scripts live under [`smoke/`](smoke/). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`vector_metrics.py`](vector_metrics.py).
+Smoke scripts live under [`smoke/`](smoke/). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
 
 Semantic-cache vector benches use **Python + redis-py** (raw float32 blobs). Prefer `bench/.venv` after `pip install -r bench/requirements.txt`.
 
@@ -129,6 +129,43 @@ CARD=2000 QUERIES=50 PORT=8989 THRESHOLD=0.2 bench/.venv/bin/python bench/vector
 | `THRESHOLD` | `0.2` | Cosine **distance** upper bound |
 
 Shared helpers: [`vemory_vec.py`](vemory_vec.py).
+
+## RDB SAVE vs SET QPS (`rdb_save_bench.py`)
+
+Measures how often calling `SAVE` during a long `SET` stream affects SET throughput.
+
+- Fixed **`N` SETs** (default 1M)
+- Every **`interval`** SETs, attempt **`SAVE`** once
+- Default intervals: `1000000 100000 10000 1000` plus a **baseline** with no SAVE
+- Reports `saves_ok`, `saves_skipped`, wall time, **SET QPS**
+
+**Busy policy** (previous background dump still running):
+
+| `SAVE_BUSY` | Behavior |
+|-------------|----------|
+| `skip` (default) | Count skip, continue SETs immediately (Redis-like) |
+| `wait` | Sleep/retry until `+OK` (forces a dump each interval; can tank QPS) |
+
+Does **not** wait for dump files to finish after `+OK` (fork/COW overlap is part of the measurement).
+
+Server must have `persistence.dir` set (built-in / `conf` default: `data/`).
+
+```bash
+./bin/vemory -c conf/vemory.ini   # separate terminal; dir=data
+bench/.venv/bin/python bench/rdb_save_bench.py
+HOST=127.0.0.1 PORT=8989 N=100000 bench/.venv/bin/python bench/rdb_save_bench.py   # quicker smoke
+SAVE_BUSY=wait INTERVALS="100000 10000" PORT=8989 bench/.venv/bin/python bench/rdb_save_bench.py
+```
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `HOST` / `PORT` | `127.0.0.1` / `6379` | Server |
+| `N` | `1000000` | SET count per round |
+| `INTERVALS` | `1000000 100000 10000 1000` | SAVE every N SETs |
+| `INCLUDE_BASELINE` | `1` | Run a no-SAVE round first |
+| `SAVE_BUSY` | `skip` | `skip` or `wait` when dump in progress |
+| `VALUE` | 16×`x` | SET value payload |
+| `WAIT_SLEEP_S` | `0.01` | Sleep between retries if `SAVE_BUSY=wait` |
 
 ## Sample results (local, indicative)
 

@@ -78,6 +78,28 @@ PORT=8989 DIM=8 CARD=100 QUERIES=50 ./bench/smoke/vector.sh
 
 Reports wall time and QPS for load + query, then checks `VDEL`. Single-threaded client; server is one event loop. Needs `redis` (`bench/.venv` preferred).
 
+## Smoke — Vector RDB SAVE (`smoke/vector_rdb.sh`)
+
+`VSET` a small card → `VGET` → `SAVE` → wait for `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch` under `DUMP_DIR` → `VGET` again. Confirms vector snapshot files are written (especially non-empty `dump.usearch`).
+
+Server must already be running with `persistence.dir` matching `DUMP_DIR` (default: repo `data/`). Does **not** restart / `load_on_startup`; that path is [`demo/03_rdb.py`](../demo/03_rdb.py).
+
+```bash
+./bin/vemory -c conf/vemory.ini          # persistence.dir=data
+./bench/smoke/vector_rdb.sh
+PORT=8989 DUMP_DIR=/path/to/data ./bench/smoke/vector_rdb.sh
+CARD=16 DIM=8 PORT=8989 ./bench/smoke/vector_rdb.sh
+```
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `HOST` / `PORT` | as above | Server |
+| `DIM` | `8` | Embedding dimension |
+| `CARD` | `8` | Vectors to `VSET` |
+| `THRESHOLD` | `0.2` | Cosine **distance** gate for `VGET` |
+| `DUMP_DIR` | `<repo>/data` | Must match server `persistence.dir` |
+| `SAVE_TIMEOUT_S` | `10` | Max wait for dump files after `SAVE` |
+
 ## Pipeline compare (`pipeline_bench.py`)
 
 Side-by-side **Vemory vs Redis** SET/GET pipeline sweep (`c=1`), still driven by `redis-benchmark --csv`. Same `n` / `PIPELINES` scaling as the smoke script.

@@ -52,6 +52,7 @@ redis-cli -p 8989
 ./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
 ./bench/smoke/pipeline.sh  # c=1 管道冒烟（仅 Vemory）
 ./bench/smoke/vector.sh    # VSET 灌库 + VGET + VDEL 抽检（redis-py）
+./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.usearch → VGET（需 persistence.dir）
 python3 bench/pipeline_bench.py                  # c=1 SET/GET：Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95（见 bench/README.md）
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE 频率 vs SET QPS

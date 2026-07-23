@@ -52,6 +52,7 @@ Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 ./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
 ./bench/smoke/pipeline.sh  # c=1 pipeline smoke (Vemory only)
 ./bench/smoke/vector.sh    # VSET load + VGET + VDEL spot-check (redis-py)
+./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.usearch → VGET (needs persistence.dir)
 python3 bench/pipeline_bench.py                  # c=1 SET/GET: Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95 (see bench/README.md)
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE frequency vs SET QPS

@@ -4,7 +4,7 @@ English | [中文](README.zh-CN.md)
 
 RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
 
-**v0.2.0** — early MVP. Optional multi-file RDB snapshot (`SAVE` / `persistence.dir`); no WAL. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
+**v0.3.0** — early MVP. Optional multi-file RDB snapshot (`SAVE` / `persistence.dir`); no WAL. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
@@ -136,7 +136,7 @@ Wire format is Redis RESP (bulk strings are binary-safe). Semantic cache verbs:
 
 `vector_blob` / query blob: raw little-endian `float32` bytes. `threshold` is a cosine **distance** upper bound (hit if best distance ≤ threshold). Also: `SET`/`GET`/`DEL`, `PING`/`ECHO`, `SAVE` (writes under `data/` by default).
 
-Binary blobs are awkward in interactive `redis-cli`; prefer a RESP client library, benches (`bench/smoke/vector.sh`, `vector_metrics.py`), or unit tests for cache commands. String KVS still works with `redis-cli`.
+Binary blobs are awkward in interactive `redis-cli`; prefer a RESP client library, benches (`bench/smoke/vector.sh`, `bench/smoke/vector_rdb.sh`, `vector_metrics.py`), or unit tests for cache commands. String KVS still works with `redis-cli`.
 
 ## Architecture
 

@@ -4,10 +4,17 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-23
+
+Optional multi-file RDB snapshot persistence.
+
 ### Added
 - Multi-file RDB snapshot: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`
 - `SAVE` command (fork background dump via `SnapshotManager`)
 - INI `[persistence]` `dir` + `load_on_startup`
+- Bench: `bench/rdb_save_bench.py` (SAVE frequency vs SET QPS)
+- Smoke: `bench/smoke/vector_rdb.sh` (VSET → SAVE → dump.usearch)
+- Demo: `demo/03_rdb.py` (dump / verify after restart)
 
 ### Changed
 - Moved `SnapshotManager` from `storage/` to `persist/` (`include/vemory/persist/`, `src/persist/`)

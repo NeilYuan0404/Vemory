@@ -41,6 +41,7 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `index` | `default_capacity` | `1024` | Initial vector-set capacity |
 | `persistence` | `dir` | `data` | RDB snapshot directory; empty disables `SAVE` |
 | `persistence` | `load_on_startup` | `false` | Load `dump.*` from `dir` on startup |
+| `persistence` | `aof` | `false` | Protobuf AOF at `dir/appendonly.aof` |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
 
@@ -159,6 +160,7 @@ Design notes by layer:
 | RESP / commands | [`docs/Protocol/Protocol.md`](docs/Protocol/Protocol.md) |
 | Storage | [`docs/Storage/StorageLayer.md`](docs/Storage/StorageLayer.md) |
 | Persist / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
+| Persist / AOF | [`docs/Persist/Aof.md`](docs/Persist/Aof.md) |
 | Embed index / vector sets | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
 Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/`), schema in `proto/VNode.proto` (codec for future replication).

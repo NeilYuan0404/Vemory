@@ -48,6 +48,7 @@ TEST(Config, Defaults) {
   EXPECT_EQ(cfg.default_capacity, 1024u);
   EXPECT_EQ(cfg.persistence_dir, "data");
   EXPECT_FALSE(cfg.load_on_startup);
+  EXPECT_FALSE(cfg.aof);
 }
 
 TEST(Config, LoadHappyPath) {

@@ -18,6 +18,8 @@ struct Config {
   // Snapshot directory; empty disables SAVE. Default: data/
   std::string persistence_dir = "data";
   bool load_on_startup = false;
+  // Append-only protobuf log under persistence_dir/appendonly.aof
+  bool aof = false;
 
   // Soft issues from the last LoadConfig (unknown keys/sections).
   std::vector<std::string> warnings;

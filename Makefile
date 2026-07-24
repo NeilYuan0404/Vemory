@@ -41,9 +41,9 @@ PROTOBUF_LIBS := -lprotobuf
 endif
 LDFLAGS  := $(PROTOBUF_LIBS)
 
-PROTO_SRC := proto/VNode.proto
-PROTO_GEN_CC := generated/VNode.pb.cc
-PROTO_GEN_H  := generated/VNode.pb.h
+PROTO_SRC := proto/VNode.proto proto/WalEntry.proto
+PROTO_GEN_CC := generated/VNode.pb.cc generated/WalEntry.pb.cc
+PROTO_GEN_H  := generated/VNode.pb.h generated/WalEntry.pb.h
 
 SRC := $(wildcard src/net/*.cc) \
        $(wildcard src/util/*.cc) \
@@ -53,7 +53,9 @@ SRC := $(wildcard src/net/*.cc) \
        $(wildcard src/persist/*.cc) \
        $(wildcard src/index/*.cc)
 
-OBJ := $(SRC:src/%.cc=$(BUILD_ROOT)/%.o) $(BUILD_ROOT)/generated/VNode.pb.o
+OBJ := $(SRC:src/%.cc=$(BUILD_ROOT)/%.o) \
+       $(BUILD_ROOT)/generated/VNode.pb.o \
+       $(BUILD_ROOT)/generated/WalEntry.pb.o
 
 MAIN_SRC := src/Vemory.cc
 MAIN_BIN := bin/vemory
@@ -121,7 +123,8 @@ proto: $(PROTO_GEN_CC) $(PROTO_GEN_H)
 
 $(PROTO_GEN_CC) $(PROTO_GEN_H): $(PROTO_SRC)
 	@mkdir -p generated
-	$(PROTOC) -I proto --cpp_out=generated $(PROTO_SRC)
+	$(PROTOC) -I proto --cpp_out=generated proto/VNode.proto
+	$(PROTOC) -I proto --cpp_out=generated proto/WalEntry.proto
 
 compile-commands:
 	python3 scripts/gen_compile_commands.py
@@ -142,9 +145,13 @@ $(BUILD_ROOT)/%.o: src/%.cc $(PROTO_GEN_H) $(USEARCH_HEADER) $(SPDLOG_HEADER)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_ROOT)/generated/VNode.pb.o: $(PROTO_GEN_CC) $(PROTO_GEN_H)
+$(BUILD_ROOT)/generated/VNode.pb.o: generated/VNode.pb.cc generated/VNode.pb.h
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $(PROTO_GEN_CC) -o $@
+	$(CXX) $(CXXFLAGS) -c generated/VNode.pb.cc -o $@
+
+$(BUILD_ROOT)/generated/WalEntry.pb.o: generated/WalEntry.pb.cc generated/WalEntry.pb.h
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c generated/WalEntry.pb.cc -o $@
 
 build/gtest/gtest-all.o: $(GTEST_DIR)/src/gtest-all.cc
 	@mkdir -p $(dir $@)

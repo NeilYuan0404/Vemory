@@ -1,5 +1,8 @@
 #include "vemory/protocol/dispatcher/VNodeDispatcher.h"
 
+#include "WalEntry.pb.h"
+#include "vemory/persist/MutationApply.h"
+#include "vemory/protocol/dispatcher/DispatchArgs.h"
 #include "vemory/protocol/resp/RespEncode.h"
 #include "vemory/storage/VNodeIndex.h"
 
@@ -7,32 +10,28 @@ void VNodeDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
   if (reply == nullptr || arg == nullptr) {
     return;
   }
-  auto* index = static_cast<VNodeIndex*>(arg);
+  auto* args = static_cast<VNodeDispatchArg*>(arg);
+  auto* index = args->index;
+  if (index == nullptr) {
+    RespEncode::AppendError(reply, "ERR index not available");
+    return;
+  }
 
   switch (ctx.cmd) {
     case CommandType::kVset: {
-      const auto st = index->Set(ctx.vector_blob, ctx.user_key, ctx.question,
-                                 ctx.answer);
-      switch (st) {
-        case VNodeIndex::Status::kOk:
-          RespEncode::AppendOk(reply);
-          break;
-        case VNodeIndex::Status::kBadValue:
-          RespEncode::AppendError(reply, "ERR invalid VSET arguments");
-          break;
-        case VNodeIndex::Status::kBadVectorSize:
-          RespEncode::AppendError(reply, "ERR invalid vector byte size");
-          break;
-        case VNodeIndex::Status::kDimMismatch:
-          RespEncode::AppendError(reply, "ERR vector dimension mismatch");
-          break;
-        case VNodeIndex::Status::kIndexInitFailed:
-          RespEncode::AppendError(reply, "ERR usearch init failed");
-          break;
-        default:
-          RespEncode::AppendError(reply, "ERR vset failed");
-          break;
+      vemory::WalEntry entry;
+      entry.set_op(vemory::WalEntry::VSET);
+      entry.set_user_key(ctx.user_key);
+      entry.set_question(ctx.question);
+      entry.set_answer(ctx.answer);
+      entry.set_vector(ctx.vector_blob);
+      const auto ar = ApplyMutation(entry, MutateSource::kClient, index,
+                                    /*kv=*/nullptr, args->wal);
+      if (!ar.ok) {
+        RespEncode::AppendError(reply, "ERR " + ar.err);
+        return;
       }
+      RespEncode::AppendOk(reply);
       break;
     }
     case CommandType::kVget: {
@@ -42,18 +41,21 @@ void VNodeDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       if (st == VNodeIndex::Status::kOk) {
         RespEncode::AppendBulkString(reply, answer);
       } else {
-        // Miss or illegal query → null bulk per protocol.
         RespEncode::AppendNullBulk(reply);
       }
       break;
     }
     case CommandType::kVdel: {
-      const auto st = index->Del(ctx.user_key);
-      if (st == VNodeIndex::Status::kOk) {
-        RespEncode::AppendInteger(reply, 1);
-      } else {
-        RespEncode::AppendInteger(reply, 0);
+      vemory::WalEntry entry;
+      entry.set_op(vemory::WalEntry::VDEL);
+      entry.set_user_key(ctx.user_key);
+      const auto ar = ApplyMutation(entry, MutateSource::kClient, index,
+                                    /*kv=*/nullptr, args->wal);
+      if (!ar.ok) {
+        RespEncode::AppendError(reply, "ERR " + ar.err);
+        return;
       }
+      RespEncode::AppendInteger(reply, ar.integer_reply);
       break;
     }
     default:

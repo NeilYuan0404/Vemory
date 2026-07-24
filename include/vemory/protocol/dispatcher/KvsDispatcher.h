@@ -5,5 +5,5 @@
 #include "vemory/protocol/RequestContext.h"
 
 // Domain dispatcher for SET / DEL / GET.
-// arg must be KvStore*.
+// arg must be KvsDispatchArg*.
 void KvsDispatcher(const RequestContext& ctx, std::string* reply, void* arg);

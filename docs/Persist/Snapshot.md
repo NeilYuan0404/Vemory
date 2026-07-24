@@ -43,9 +43,9 @@ Under `dir`:
 
 Write path: `*.tmp` → `fflush`/`fsync` → `rename`. Payload files first, **`dump.meta` last**. Load requires a readable `dump.meta`, then the other files.
 
-No WAL / AOF. Format is Vemory-specific (not Redis RDB-compatible).
+Format is Vemory-specific (not Redis RDB-compatible). Optional protobuf AOF: [`Aof.md`](Aof.md) (`persistence.aof`).
 
----
+Wire: `redis-cli SAVE` (default dir `data/`; empty `persistence.dir` disables).
 
 ## SnapshotManager API
 

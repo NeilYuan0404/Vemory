@@ -1,6 +1,9 @@
 #include "vemory/protocol/dispatcher/KvsDispatcher.h"
 
+#include "WalEntry.pb.h"
+#include "vemory/persist/MutationApply.h"
 #include "vemory/protocol/CommandType.h"
+#include "vemory/protocol/dispatcher/DispatchArgs.h"
 #include "vemory/protocol/resp/RespEncode.h"
 #include "vemory/storage/KvStore.h"
 
@@ -8,13 +11,23 @@ void KvsDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
   if (reply == nullptr || arg == nullptr) {
     return;
   }
-  auto* store = static_cast<KvStore*>(arg);
+  auto* args = static_cast<KvsDispatchArg*>(arg);
+  auto* store = args->kv;
+  if (store == nullptr) {
+    RespEncode::AppendError(reply, "ERR kv not available");
+    return;
+  }
 
   switch (ctx.cmd) {
     case CommandType::kSet: {
-      const auto st = store->Set(ctx.key, ctx.element);
-      if (st != KvStore::Status::kOk) {
-        RespEncode::AppendError(reply, "ERR set failed");
+      vemory::WalEntry entry;
+      entry.set_op(vemory::WalEntry::SET);
+      entry.set_key(ctx.key);
+      entry.set_value(ctx.element);
+      const auto ar = ApplyMutation(entry, MutateSource::kClient,
+                                    /*vnode_index=*/nullptr, store, args->wal);
+      if (!ar.ok) {
+        RespEncode::AppendError(reply, "ERR " + ar.err);
         return;
       }
       RespEncode::AppendOk(reply);
@@ -35,16 +48,16 @@ void KvsDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       break;
     }
     case CommandType::kDel: {
-      const auto st = store->Del(ctx.key);
-      if (st == KvStore::Status::kNotFound) {
-        RespEncode::AppendInteger(reply, 0);
+      vemory::WalEntry entry;
+      entry.set_op(vemory::WalEntry::DEL);
+      entry.set_key(ctx.key);
+      const auto ar = ApplyMutation(entry, MutateSource::kClient,
+                                    /*vnode_index=*/nullptr, store, args->wal);
+      if (!ar.ok) {
+        RespEncode::AppendError(reply, "ERR " + ar.err);
         return;
       }
-      if (st != KvStore::Status::kOk) {
-        RespEncode::AppendError(reply, "ERR del failed");
-        return;
-      }
-      RespEncode::AppendInteger(reply, 1);
+      RespEncode::AppendInteger(reply, ar.integer_reply);
       break;
     }
     default:

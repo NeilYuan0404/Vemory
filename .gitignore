@@ -12,6 +12,7 @@
 # RDB snapshots (keep directory via data/.gitkeep)
 /data/dump.*
 /data/*.tmp
+/data/appendonly.aof
 /demo/data/
 __pycache__/
 *.pyc

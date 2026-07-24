@@ -41,6 +41,7 @@ redis-cli -p 8989
 | `index` | `default_capacity` | `1024` | 向量集合初始容量 |
 | `persistence` | `dir` | `data` | RDB 快照目录；空则 `SAVE` 不可用 |
 | `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.*` |
+| `persistence` | `aof` | `false` | Protobuf AOF：`dir/appendonly.aof` |
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
 
@@ -159,6 +160,7 @@ client
 | RESP / 命令 | [`docs/Protocol/Protocol.md`](docs/Protocol/Protocol.md) |
 | 存储 | [`docs/Storage/StorageLayer.md`](docs/Storage/StorageLayer.md) |
 | 持久化 / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
+| 持久化 / AOF | [`docs/Persist/Aof.md`](docs/Persist/Aof.md) |
 | 嵌入索引 / 向量集合 | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
 目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`），schema 在 `proto/VNode.proto`（供后续复制的编解码）。

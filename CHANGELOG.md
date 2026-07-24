@@ -4,6 +4,14 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Protobuf AOF (`WalEntry`): `{persistence.dir}/appendonly.aof`, INI `persistence.aof`
+- Sync append on `SET`/`DEL`/`VSET`/`VDEL`; startup replay after optional RDB load
+- Docs: [`docs/Persist/Aof.md`](docs/Persist/Aof.md)
+
+### Limits
+- AOF is sync write (no io_uring / everysec fsync yet); no AOF rewrite after SAVE
+
 ## [0.3.0] — 2026-07-23
 
 Optional multi-file RDB snapshot persistence.

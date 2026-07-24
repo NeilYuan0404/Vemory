@@ -146,6 +146,17 @@ bool ApplyKey(Config* cfg, const std::string& section, const std::string& key,
       cfg->load_on_startup = v;
       return true;
     }
+    if (key == "aof") {
+      bool v = false;
+      if (!ParseBool(value, &v)) {
+        if (error != nullptr) {
+          *error = "invalid persistence.aof: " + value;
+        }
+        return false;
+      }
+      cfg->aof = v;
+      return true;
+    }
   }
 
   cfg->warnings.push_back("unknown key " + section + "." + key);

@@ -15,6 +15,7 @@
 #include "vemory/protocol/resp/RespProtocolHandler.h"
 #include "vemory/storage/KvStore.h"
 #include "vemory/persist/SnapshotManager.h"
+#include "vemory/persist/WalManager.h"
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Config.h"
 #include "vemory/util/Logging.h"
@@ -118,6 +119,7 @@ int main(int argc, char** argv) {
   KvStore kv;
   kv.Reserve(cfg.kv_reserve);
   SnapshotManager snapshot(&vnode_index, &kv, cfg.persistence_dir);
+  WalManager wal(&vnode_index, &kv, cfg.persistence_dir, cfg.aof);
 
   if (cfg.load_on_startup && !cfg.persistence_dir.empty()) {
     const auto st = snapshot.Load();
@@ -133,7 +135,20 @@ int main(int argc, char** argv) {
     }
   }
 
-  CommandHandler commands(&vnode_index, &kv, &snapshot);
+  if (wal.enabled()) {
+    const auto st = wal.Replay();
+    if (st == WalManager::Status::kOk) {
+      // logged inside Replay
+    } else if (st == WalManager::Status::kNotConfigured) {
+      // ignore
+    } else {
+      spdlog::error("Failed to replay AOF from {} (status={})", wal.path(),
+                    static_cast<int>(st));
+      return EXIT_FAILURE;
+    }
+  }
+
+  CommandHandler commands(&vnode_index, &kv, &snapshot, &wal);
   auto protocol = std::make_shared<RespProtocolHandler>();
 
   server.Start(cfg.bind, cfg.port, [&commands, protocol](TcpConn::Ptr conn) {

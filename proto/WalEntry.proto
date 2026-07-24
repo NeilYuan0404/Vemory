@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package vemory;
+
+// One write mutation for AOF / future replication (not RDB node state).
+message WalEntry {
+  enum Op {
+    OP_UNSPECIFIED = 0;
+    SET = 1;
+    DEL = 2;
+    VSET = 3;
+    VDEL = 4;
+  }
+  Op op = 1;
+  // SET / DEL
+  string key = 2;
+  bytes value = 3;
+  // VSET / VDEL
+  string user_key = 4;
+  string question = 5;
+  string answer = 6;
+  bytes vector = 7;  // VSET: raw float32 blob
+}

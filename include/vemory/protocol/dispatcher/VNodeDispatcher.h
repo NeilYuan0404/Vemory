@@ -5,5 +5,5 @@
 #include "vemory/protocol/RequestContext.h"
 
 // Domain dispatcher for VSET / VGET / VDEL.
-// arg must be VNodeIndex*.
+// arg must be VNodeDispatchArg*.
 void VNodeDispatcher(const RequestContext& ctx, std::string* reply, void* arg);

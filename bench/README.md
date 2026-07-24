@@ -136,11 +136,12 @@ Does **not** start/stop servers. Use separate `persistence.dir` for the AOF Vemo
 # Terminal A — Vemory no AOF (example port 8989, aof=false)
 ./bin/vemory -c conf/vemory.ini
 
-# Terminal B — Vemory AOF (example: port 8990, aof=true, dir=data_aof_bench)
-# write a small ini or override and start on :8990
+# Terminal B — Vemory AOF (port 8990, aof=true, dir=data_aof_bench)
+./bin/vemory -c conf/vemory_aof_bench.ini
 
 # Terminal C — Redis with AOF
 redis-server --port 6379 --appendonly yes
+# or: redis-cli CONFIG SET appendonly yes
 
 python3 bench/aof_bench.py
 N=10000 VEMORY_PORT=8989 VEMORY_AOF_PORT=8990 REDIS_PORT=6379 python3 bench/aof_bench.py
@@ -273,6 +274,19 @@ Run: `HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py`
 | 100000 | 10 | 0 | 75.568 | 13233.1 |
 | 10000 | 100 | 0 | 79.685 | 12549.5 |
 | 1000 | 984 | 16 | 111.473 | 8970.8 |
+
+### AOF QPS (`aof_bench.py`)
+
+Run: `python3 bench/aof_bench.py`  
+(release `bin/vemory`; `c=1 P=1`, `N=100000`; no-AOF `:8989`, AOF `:8990` / `conf/vemory_aof_bench.ini`, Redis `appendonly yes` `:6379`)
+
+ECHO (vemory_no_aof): **13509.86** rps
+
+| mode | SET (rps) | GET (rps) |
+|------|----------:|----------:|
+| vemory_no_aof | 13113.03 | 12573.87 |
+| vemory_aof | 8722.20 | 12828.74 |
+| redis_aof | 9790.48 | 12682.31 |
 
 ## Notes
 

@@ -57,6 +57,7 @@ Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 python3 bench/pipeline_bench.py                  # c=1 SET/GET: Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95 (see bench/README.md)
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE frequency vs SET QPS
+python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
 ```
 
 ### Latest pipeline result
@@ -112,6 +113,21 @@ Run: `HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py`
 | 1000 | 984 | 16 | 111.473 | 8970.8 |
 
 SET via `redis-benchmark` (`c=1 p=1`); SAVE via `redis-cli` between chunks. Indicative only.
+
+### Latest AOF QPS
+
+Run: `python3 bench/aof_bench.py`  
+(release `bin/vemory`; `c=1 P=1`, `N=100000`; Vemory no-AOF `:8989`, AOF `:8990` / `conf/vemory_aof_bench.ini`, Redis `appendonly yes` `:6379`)
+
+ECHO (vemory_no_aof): **13509.86** rps
+
+| mode | SET (rps) | GET (rps) |
+|------|----------:|----------:|
+| vemory_no_aof | 13113.03 | 12573.87 |
+| vemory_aof | 8722.20 | 12828.74 |
+| redis_aof | 9790.48 | 12682.31 |
+
+Indicative only — single-threaded event loop; AOF write path differs from Redis.
 
 Other targets:
 

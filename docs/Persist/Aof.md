@@ -66,7 +66,7 @@ DEL/VDEL miss (`integer_reply == 0`) does not append.
 | `WalManager` | `include/vemory/persist/WalManager.h` |
 | `ApplyMutation` | `include/vemory/persist/MutationApply.h` |
 
-MVP: synchronous `fwrite` + `fflush`. Phase 2 (not implemented): io_uring submit, CQE drain in `EventLoop`, optional everysec `fdatasync`.
+MVP: synchronous `fwrite` + `fflush`. Phase 2 (not implemented): background flush thread draining a bounded [`BlockingQueue`](../../include/vemory/util/BlockingQueue.h) (SPSC-style: reactor encodes frames, one writer thread `write`/`fsync`), and/or io_uring submit with CQE drain in `EventLoop`, optional everysec `fdatasync`. The queue header is already in-tree; `WalManager` is not wired to it yet.
 
 ---
 

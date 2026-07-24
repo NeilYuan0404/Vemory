@@ -4,7 +4,7 @@
 
 兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串可用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
 
-**v0.3.0 — 早期 MVP。** 可选多文件 RDB 快照（`SAVE` / `persistence.dir`）；无 WAL。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v0.4.0 — 早期 MVP。** 可选多文件 RDB 快照（`SAVE` / `persistence.dir`），以及可选 Protobuf AOF（`persistence.aof`，后台刷盘）。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 
@@ -45,7 +45,7 @@ redis-cli -p 8989
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
 
-快照文件（多文件）默认在 `data/`：`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`。`SAVE` 为 fork 后台写盘（无 WAL）。
+快照文件（多文件）默认在 `data/`：`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`。`SAVE` 为 fork 后台写盘。可选 AOF：开启 `persistence.aof`（请求路径编码，刷盘线程写 `appendonly.aof`）。
 
 压测（服务端需已启动；依赖 `redis-benchmark` / `redis-cli`）：
 

@@ -13,6 +13,7 @@
 /data/dump.*
 /data/*.tmp
 /data/appendonly.aof
+/data_aof_bench/
 /demo/data/
 __pycache__/
 *.pyc

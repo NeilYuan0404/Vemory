@@ -4,7 +4,7 @@ Requires a running server (`./bin/vemory` or `./bin/vemory <port>`).
 
 Default: `HOST=127.0.0.1`, `PORT=6379`.
 
-Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
+Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
 
 Semantic-cache vector benches use **Python + redis-py** (raw float32 blobs). Prefer `bench/.venv` after `pip install -r bench/requirements.txt`.
 
@@ -120,6 +120,40 @@ PIPELINES="10 40 160" python3 bench/pipeline_bench.py
 | `R` | `10000` | Random keyspace (`-r`) |
 | `D` | `64` | SET value size (`-d`) |
 | `PIPELINES` | `10 20 40 100 160` | Pipeline depths (`-P`) |
+
+## AOF QPS compare (`aof_bench.py`)
+
+Side-by-side **ECHO + SET/GET** via `redis-benchmark --csv`, fixed **`c=1 P=1`** (same baseline style as [`rdb_save_bench.py`](rdb_save_bench.py)). Compares:
+
+1. Vemory ECHO (no-AOF port)
+2. Vemory SET/GET with `aof=false`
+3. Vemory SET/GET with `aof=true`
+4. Redis SET/GET with `appendonly yes` (script checks `CONFIG GET appendonly`)
+
+Does **not** start/stop servers. Use separate `persistence.dir` for the AOF Vemory instance so files do not clash.
+
+```bash
+# Terminal A — Vemory no AOF (example port 8989, aof=false)
+./bin/vemory -c conf/vemory.ini
+
+# Terminal B — Vemory AOF (example: port 8990, aof=true, dir=data_aof_bench)
+# write a small ini or override and start on :8990
+
+# Terminal C — Redis with AOF
+redis-server --port 6379 --appendonly yes
+
+python3 bench/aof_bench.py
+N=10000 VEMORY_PORT=8989 VEMORY_AOF_PORT=8990 REDIS_PORT=6379 python3 bench/aof_bench.py
+```
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `VEMORY_HOST` / `VEMORY_PORT` | `127.0.0.1` / `8989` | Vemory without AOF |
+| `VEMORY_AOF_HOST` / `VEMORY_AOF_PORT` | `127.0.0.1` / `8990` | Vemory with AOF |
+| `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | Redis with AOF |
+| `N` | `100000` | Requests per test |
+| `R` / `D` | `10000` / `64` | Keyspace / SET value size (`-r` / `-d`) |
+| `ECHO_MSG` | `hello` | ECHO payload |
 
 ## Vector metrics (`vector_metrics.py`)
 

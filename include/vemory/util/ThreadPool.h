@@ -36,7 +36,7 @@ class ThreadPool {
   template <typename F, typename... Args>
   void Post(F&& f, Args&&... args) {
     auto task = std::bind(std::forward<F>(f), std::forward<Args>(args)...);
-    task_queue_.Push(std::move(task));
+    (void)task_queue_.Push(std::move(task));
   }
 
  private:

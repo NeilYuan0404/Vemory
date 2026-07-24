@@ -1,6 +1,7 @@
 #include "vemory/persist/WalManager.h"
 
 #include <filesystem>
+#include <utility>
 
 #include <spdlog/spdlog.h>
 
@@ -37,13 +38,22 @@ WalManager::WalManager(VNodeIndex* vnode_index, KvStore* kv, std::string dir,
     : vnode_index_(vnode_index),
       kv_(kv),
       dir_(std::move(dir)),
-      enabled_(enable && !dir_.empty()) {
+      enabled_(enable && !dir_.empty()),
+      queue_(kQueueCapacity) {
   if (enabled_) {
     path_ = dir_ + "/" + kFileName;
+    flush_thread_ = std::thread([this] { FlushLoop(); });
   }
 }
 
 WalManager::~WalManager() {
+  if (enabled_) {
+    Flush();
+    queue_.Cancel();
+    if (flush_thread_.joinable()) {
+      flush_thread_.join();
+    }
+  }
   if (fp_ != nullptr) {
     std::fclose(fp_);
     fp_ = nullptr;
@@ -66,6 +76,21 @@ uint32_t WalManager::ReadU32Le(const unsigned char in[4]) {
   return ::ReadU32Le(in);
 }
 
+void WalManager::IncPending() {
+  std::lock_guard<std::mutex> lock(drain_mu_);
+  ++pending_;
+}
+
+void WalManager::DecPending() {
+  std::lock_guard<std::mutex> lock(drain_mu_);
+  if (pending_ > 0) {
+    --pending_;
+  }
+  if (pending_ == 0) {
+    drain_cv_.notify_all();
+  }
+}
+
 WalManager::Status WalManager::EnsureOpenForAppend() {
   if (!enabled_) {
     return Status::kNotConfigured;
@@ -85,14 +110,11 @@ WalManager::Status WalManager::EnsureOpenForAppend() {
   return Status::kOk;
 }
 
-WalManager::Status WalManager::WriteFrame(const std::string& payload) {
-  if (payload.size() > 0xffffffffu) {
+WalManager::Status WalManager::WriteFrame(const std::string& frame) {
+  if (frame.empty()) {
     return Status::kError;
   }
-  unsigned char len_buf[4];
-  WriteU32Le(len_buf, static_cast<uint32_t>(payload.size()));
-  if (!WriteExact(fp_, len_buf, 4) ||
-      !WriteExact(fp_, payload.data(), payload.size())) {
+  if (!WriteExact(fp_, frame.data(), frame.size())) {
     return Status::kIoError;
   }
   if (std::fflush(fp_) != 0) {
@@ -101,19 +123,83 @@ WalManager::Status WalManager::WriteFrame(const std::string& payload) {
   return Status::kOk;
 }
 
+void WalManager::FlushLoop() {
+  std::string frame;
+  while (queue_.Pop(&frame)) {
+    if (io_failed_.load(std::memory_order_relaxed)) {
+      DecPending();
+      continue;
+    }
+    const auto open_st = EnsureOpenForAppend();
+    if (open_st != Status::kOk) {
+      spdlog::error("AOF open failed path={} status={}", path_,
+                    static_cast<int>(open_st));
+      io_failed_.store(true, std::memory_order_relaxed);
+      DecPending();
+      queue_.Cancel();
+      while (queue_.Pop(&frame)) {
+        DecPending();
+      }
+      return;
+    }
+    const auto st = WriteFrame(frame);
+    DecPending();
+    if (st != Status::kOk) {
+      spdlog::error("AOF write failed path={} status={}", path_,
+                    static_cast<int>(st));
+      io_failed_.store(true, std::memory_order_relaxed);
+      queue_.Cancel();
+      while (queue_.Pop(&frame)) {
+        DecPending();
+      }
+      return;
+    }
+  }
+}
+
 WalManager::Status WalManager::Append(const vemory::WalEntry& entry) {
   if (!enabled_) {
     return Status::kNotConfigured;
   }
-  const auto open_st = EnsureOpenForAppend();
-  if (open_st != Status::kOk) {
-    return open_st;
+  if (io_failed_.load(std::memory_order_relaxed)) {
+    return Status::kIoError;
   }
+  if (queue_.cancelled()) {
+    return Status::kError;
+  }
+
   std::string payload;
   if (!entry.SerializeToString(&payload)) {
     return Status::kError;
   }
-  return WriteFrame(payload);
+  if (payload.size() > 0xffffffffu) {
+    return Status::kError;
+  }
+
+  std::string frame;
+  frame.resize(4);
+  WriteU32Le(reinterpret_cast<unsigned char*>(&frame[0]),
+             static_cast<uint32_t>(payload.size()));
+  frame.append(payload);
+
+  IncPending();
+  if (!queue_.Push(std::move(frame))) {
+    DecPending();
+    return Status::kError;
+  }
+  return Status::kOk;
+}
+
+WalManager::Status WalManager::Flush() {
+  if (!enabled_) {
+    return Status::kOk;
+  }
+  std::unique_lock<std::mutex> lock(drain_mu_);
+  drain_cv_.wait(lock, [this] { return pending_ == 0; });
+  if (io_failed_.load(std::memory_order_relaxed)) {
+    return Status::kIoError;
+  }
+  return Status::kOk;
 }
 
 WalManager::Status WalManager::Replay() {

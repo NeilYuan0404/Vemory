@@ -57,6 +57,7 @@ redis-cli -p 8989
 python3 bench/pipeline_bench.py                  # c=1 SET/GET：Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95（见 bench/README.md）
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE 频率 vs SET QPS
+python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
 ```
 
 ### 最近一次 pipeline 结果
@@ -112,6 +113,21 @@ Pipeline 扫描（`c=1`）：
 | 1000 | 984 | 16 | 111.473 | 8970.8 |
 
 SET 走 `redis-benchmark`（`c=1 p=1`）；SAVE 在 chunk 之间用 `redis-cli` 触发。仅供参考。
+
+### 最近一次 AOF QPS
+
+运行：`python3 bench/aof_bench.py`  
+（release `bin/vemory`；`c=1 P=1`，`N=100000`；无 AOF `:8989`，AOF `:8990` / `conf/vemory_aof_bench.ini`，Redis `appendonly yes` `:6379`）
+
+ECHO（vemory_no_aof）：**13509.86** rps
+
+| mode | SET (rps) | GET (rps) |
+|------|----------:|----------:|
+| vemory_no_aof | 13113.03 | 12573.87 |
+| vemory_aof | 8722.20 | 12828.74 |
+| redis_aof | 9790.48 | 12682.31 |
+
+仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。
 
 其他目标：
 

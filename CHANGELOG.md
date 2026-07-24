@@ -4,13 +4,22 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-24
+
+Optional protobuf AOF (WAL) with background flush.
+
 ### Added
 - Protobuf AOF (`WalEntry`): `{persistence.dir}/appendonly.aof`, INI `persistence.aof`
 - Background AOF flush: encode on caller thread, bounded `BlockingQueue`, single writer thread (`fwrite` + `fflush`)
+- Startup replay after optional RDB load (`MutateSource::kAofReplay` does not re-append)
 - Docs: [`docs/Persist/Aof.md`](docs/Persist/Aof.md)
+- Bench: [`bench/aof_bench.py`](bench/aof_bench.py) (ECHO + SET/GET vs Redis AOF; `c=1 P=1`)
+- Config: [`conf/vemory_aof_bench.ini`](conf/vemory_aof_bench.ini) for the AOF bench instance
 
 ### Limits
 - AOF has no io_uring / everysec fsync yet; crash may lose queued frames and OS buffers; no AOF rewrite after SAVE
+- `Append` success means enqueued, not durable on disk
+- Not Redis AOF / RESP format
 
 ## [0.3.0] — 2026-07-23
 

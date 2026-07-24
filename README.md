@@ -4,7 +4,7 @@ English | [中文](README.zh-CN.md)
 
 RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
 
-**v0.3.0** — early MVP. Optional multi-file RDB snapshot (`SAVE` / `persistence.dir`); no WAL. Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
+**v0.4.0** — early MVP. Optional multi-file RDB snapshot (`SAVE` / `persistence.dir`) plus optional protobuf AOF (`persistence.aof`, background flush). Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
@@ -45,7 +45,7 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
 
-Snapshot files (multi-file) under `data/` by default: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`. `SAVE` forks a background writer (no WAL).
+Snapshot files (multi-file) under `data/` by default: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`. `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (encode on the request path, flush thread writes `appendonly.aof`).
 
 Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 

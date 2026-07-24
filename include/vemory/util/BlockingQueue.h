@@ -17,18 +17,19 @@ class BlockingQueue {
   BlockingQueue(const BlockingQueue&) = delete;
   BlockingQueue& operator=(const BlockingQueue&) = delete;
 
-  // Move-friendly enqueue. Blocks while full. Returns early if Cancel() was called
-  // (item is not enqueued).
-  void Push(T value) {
+  // Move-friendly enqueue. Blocks while full.
+  // Returns false if Cancel() was called (item is not enqueued).
+  bool Push(T value) {
     std::unique_lock<std::mutex> lock(mutex_);
     not_full_.wait(lock, [this] {
       return queue_.size() < capacity_ || cancelled_;
     });
     if (cancelled_) {
-      return;
+      return false;
     }
     queue_.push(std::move(value));
     not_empty_.notify_one();
+    return true;
   }
 
   // Dequeue into *value (moved). Blocks while empty.

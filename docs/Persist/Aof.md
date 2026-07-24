@@ -2,7 +2,7 @@
 
 Append-only protobuf log of write mutations. Complements multi-file RDB snapshots ([`Snapshot.md`](Snapshot.md)).
 
-Live path: successful `SET` / `DEL` / `VSET` / `VDEL` → `ApplyMutation` → `WalManager::Append` (sync write).
+Live path: successful `SET` / `DEL` / `VSET` / `VDEL` → `ApplyMutation` → `WalManager::Append` (encode + enqueue) → flush thread `fwrite` + `fflush`.
 
 Startup: optional `SnapshotManager::Load`, then `WalManager::Replay` (`MutateSource::kAofReplay` does **not** re-append).
 
@@ -65,13 +65,15 @@ DEL/VDEL miss (`integer_reply == 0`) does not append.
 |-----------|------|
 | `WalManager` | `include/vemory/persist/WalManager.h` |
 | `ApplyMutation` | `include/vemory/persist/MutationApply.h` |
+| `BlockingQueue` | `include/vemory/util/BlockingQueue.h` |
 
-MVP: synchronous `fwrite` + `fflush`. Phase 2 (not implemented): background flush thread draining a bounded [`BlockingQueue`](../../include/vemory/util/BlockingQueue.h) (SPSC-style: reactor encodes frames, one writer thread `write`/`fsync`), and/or io_uring submit with CQE drain in `EventLoop`, optional everysec `fdatasync`. The queue header is already in-tree; `WalManager` is not wired to it yet.
+`Append` serializes on the caller thread and pushes a complete frame into a bounded queue (capacity 1024; full → block). One flush thread pops and writes (`fwrite` + `fflush`). `Flush()` waits until pending frames are written. Later (not implemented): io_uring and/or everysec `fdatasync`.
 
 ---
 
 ## Limits
 
 - No AOF rewrite after `SAVE` (file only grows while enabled)
-- Crash may lose the last unflushed OS buffers (no everysec fsync yet)
+- Crash may lose queued frames and OS buffers (no everysec fsync yet)
+- `Append` success means enqueued, not durable on disk
 - Not Redis AOF / RESP format

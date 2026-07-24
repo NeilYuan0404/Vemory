@@ -6,11 +6,11 @@ All notable changes to Vemory are documented in this file.
 
 ### Added
 - Protobuf AOF (`WalEntry`): `{persistence.dir}/appendonly.aof`, INI `persistence.aof`
-- Sync append on `SET`/`DEL`/`VSET`/`VDEL`; startup replay after optional RDB load
+- Background AOF flush: encode on caller thread, bounded `BlockingQueue`, single writer thread (`fwrite` + `fflush`)
 - Docs: [`docs/Persist/Aof.md`](docs/Persist/Aof.md)
 
 ### Limits
-- AOF is sync write (no io_uring / everysec fsync yet); no AOF rewrite after SAVE
+- AOF has no io_uring / everysec fsync yet; crash may lose queued frames and OS buffers; no AOF rewrite after SAVE
 
 ## [0.3.0] — 2026-07-23
 

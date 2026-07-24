@@ -70,23 +70,26 @@ TEST(WalManager, AppendReplayRoundTrip) {
   TempDir dir;
   VNodeIndex idx(64);
   KvStore kv;
-  WalManager wal(&idx, &kv, dir.path(), /*enable=*/true);
+  {
+    WalManager wal(&idx, &kv, dir.path(), /*enable=*/true);
 
-  {
-    vemory::WalEntry e;
-    e.set_op(vemory::WalEntry::SET);
-    e.set_key("k1");
-    e.set_value("v1");
-    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
-  }
-  {
-    vemory::WalEntry e;
-    e.set_op(vemory::WalEntry::VSET);
-    e.set_user_key("uk1");
-    e.set_question("q1");
-    e.set_answer("ans1");
-    e.set_vector(FloatBlob({1.f, 0.f, 0.f}));
-    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    {
+      vemory::WalEntry e;
+      e.set_op(vemory::WalEntry::SET);
+      e.set_key("k1");
+      e.set_value("v1");
+      ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    }
+    {
+      vemory::WalEntry e;
+      e.set_op(vemory::WalEntry::VSET);
+      e.set_user_key("uk1");
+      e.set_question("q1");
+      e.set_answer("ans1");
+      e.set_vector(FloatBlob({1.f, 0.f, 0.f}));
+      ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    }
+    ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
   }
 
   VNodeIndex idx2(64);
@@ -108,16 +111,19 @@ TEST(WalManager, ReplayDoesNotReAppend) {
   TempDir dir;
   VNodeIndex idx(32);
   KvStore kv;
-  WalManager wal(&idx, &kv, dir.path(), true);
+  std::uintmax_t size_before = 0;
+  {
+    WalManager wal(&idx, &kv, dir.path(), true);
 
-  vemory::WalEntry e;
-  e.set_op(vemory::WalEntry::SET);
-  e.set_key("only");
-  e.set_value("once");
-  ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    vemory::WalEntry e;
+    e.set_op(vemory::WalEntry::SET);
+    e.set_key("only");
+    e.set_value("once");
+    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
 
-  const auto size_before =
-      std::filesystem::file_size(dir.path() + "/appendonly.aof");
+    size_before = std::filesystem::file_size(dir.path() + "/appendonly.aof");
+  }
 
   VNodeIndex idx2(32);
   KvStore kv2;
@@ -137,28 +143,31 @@ TEST(WalManager, ClientPathViaHandler) {
   TempDir dir;
   VNodeIndex idx(32);
   KvStore kv;
-  WalManager wal(&idx, &kv, dir.path(), true);
-  CommandHandler commands(&idx, &kv, /*snapshot=*/nullptr, &wal);
+  {
+    WalManager wal(&idx, &kv, dir.path(), true);
+    CommandHandler commands(&idx, &kv, /*snapshot=*/nullptr, &wal);
 
-  RequestContext set_ctx;
-  set_ctx.cmd = CommandType::kSet;
-  set_ctx.key = "hello";
-  set_ctx.element = "world";
-  std::string reply;
-  commands.Dispatch(set_ctx, &reply);
-  EXPECT_EQ(reply, "+OK\r\n");
+    RequestContext set_ctx;
+    set_ctx.cmd = CommandType::kSet;
+    set_ctx.key = "hello";
+    set_ctx.element = "world";
+    std::string reply;
+    commands.Dispatch(set_ctx, &reply);
+    EXPECT_EQ(reply, "+OK\r\n");
 
-  RequestContext vset_ctx;
-  vset_ctx.cmd = CommandType::kVset;
-  vset_ctx.vector_blob = FloatBlob({0.f, 1.f, 0.f});
-  vset_ctx.user_key = "u1";
-  vset_ctx.question = "q";
-  vset_ctx.answer = "a";
-  reply.clear();
-  commands.Dispatch(vset_ctx, &reply);
-  EXPECT_EQ(reply, "+OK\r\n");
+    RequestContext vset_ctx;
+    vset_ctx.cmd = CommandType::kVset;
+    vset_ctx.vector_blob = FloatBlob({0.f, 1.f, 0.f});
+    vset_ctx.user_key = "u1";
+    vset_ctx.question = "q";
+    vset_ctx.answer = "a";
+    reply.clear();
+    commands.Dispatch(vset_ctx, &reply);
+    EXPECT_EQ(reply, "+OK\r\n");
 
-  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/appendonly.aof"));
+    ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
+    EXPECT_TRUE(std::filesystem::exists(dir.path() + "/appendonly.aof"));
+  }
 
   VNodeIndex idx2(32);
   KvStore kv2;
@@ -172,6 +181,32 @@ TEST(WalManager, ClientPathViaHandler) {
   ASSERT_EQ(idx2.Get(FloatBlob({0.f, 1.f, 0.f}), 0.2f, &answer),
             VNodeIndex::Status::kOk);
   EXPECT_EQ(answer, "a");
+}
+
+TEST(WalManager, MultipleAppendFlush) {
+  TempDir dir;
+  VNodeIndex idx(32);
+  KvStore kv;
+  WalManager wal(&idx, &kv, dir.path(), true);
+
+  for (int i = 0; i < 8; ++i) {
+    vemory::WalEntry e;
+    e.set_op(vemory::WalEntry::SET);
+    e.set_key("k" + std::to_string(i));
+    e.set_value("v" + std::to_string(i));
+    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+  }
+  ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
+
+  VNodeIndex idx2(32);
+  KvStore kv2;
+  WalManager wal2(&idx2, &kv2, dir.path(), true);
+  ASSERT_EQ(wal2.Replay(), WalManager::Status::kOk);
+  for (int i = 0; i < 8; ++i) {
+    std::string val;
+    ASSERT_EQ(kv2.Get("k" + std::to_string(i), &val), KvStore::Status::kOk);
+    EXPECT_EQ(val, "v" + std::to_string(i));
+  }
 }
 
 TEST(Config, AofKey) {

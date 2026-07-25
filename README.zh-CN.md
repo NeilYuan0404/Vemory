@@ -43,7 +43,7 @@ redis-cli -p 8989
 | `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.*` |
 | `persistence` | `aof` | `false` | Protobuf AOF：`dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always`（`fdatasync`） |
-| `persistence` | `aof_io` | `auto` | `auto` / `thread` / `iouring`（刷盘后端；失败回退 thread） |
+| `persistence` | `aof_io` | `thread` | `auto` / `thread` / `iouring`（刷盘后端；生产请用 `thread`——`iouring` 仅为试验） |
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
 
@@ -119,17 +119,17 @@ SET 走 `redis-benchmark`（`c=1 p=1`）；SAVE 在 chunk 之间用 `redis-cli` 
 ### 最近一次 AOF QPS
 
 运行：`python3 bench/aof_bench.py`  
-（release `bin/vemory` `-O2 -DNDEBUG`；`c=1 P=1`，`N=100000`；无 AOF `:8989`，AOF `:8990` / `aof_fsync=everysec`，Redis `appendonly yes` + `appendfsync everysec` `:6379`）
+（release `bin/vemory` `-O2 -DNDEBUG`；`c=1 P=1`，`N=100000`；无 AOF `:8989`，AOF `:8990` / `aof_fsync=everysec` / `aof_io=thread`，Redis `appendonly yes` + `appendfsync everysec` `:6379`）
 
-ECHO（vemory_no_aof）：**13958.68** rps
+ECHO（vemory_no_aof）：**13989.93** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13361.84 | 13082.16 |
-| vemory_aof | 10774.70 | 12960.08 |
-| redis_aof | 9985.02 | 12639.03 |
+| vemory_no_aof | 13356.48 | 13002.21 |
+| vemory_aof | 10582.01 | 12835.32 |
+| redis_aof | 9984.03 | 12083.13 |
 
-仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。两侧 AOF 均为 everysec 刷盘。
+仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。两侧 AOF 均为 everysec 刷盘。上表为 `aof_io=thread`（生产路径）。`aof_io=iouring` 目前只是试验功能，**不建议实际使用**（有 liburing 时 `auto` 也可能选中它）。
 
 其他目标：
 

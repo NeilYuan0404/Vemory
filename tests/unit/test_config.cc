@@ -50,7 +50,7 @@ TEST(Config, Defaults) {
   EXPECT_FALSE(cfg.load_on_startup);
   EXPECT_FALSE(cfg.aof);
   EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kEverySec);
-  EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kAuto);
+  EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kThread);
 }
 
 TEST(Config, LoadHappyPath) {

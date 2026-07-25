@@ -43,7 +43,7 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `persistence` | `load_on_startup` | `false` | Load `dump.*` from `dir` on startup |
 | `persistence` | `aof` | `false` | Protobuf AOF at `dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always` (`fdatasync`) |
-| `persistence` | `aof_io` | `auto` | `auto` / `thread` / `iouring` (flush backend; falls back to thread) |
+| `persistence` | `aof_io` | `thread` | `auto` / `thread` / `iouring` (flush backend; prefer `thread` — `iouring` is experimental only) |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
 
@@ -119,17 +119,17 @@ SET via `redis-benchmark` (`c=1 p=1`); SAVE via `redis-cli` between chunks. Indi
 ### Latest AOF QPS
 
 Run: `python3 bench/aof_bench.py`  
-(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; Vemory no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; Vemory no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec` / `aof_io=thread`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
 
-ECHO (vemory_no_aof): **13958.68** rps
+ECHO (vemory_no_aof): **13989.93** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13361.84 | 13082.16 |
-| vemory_aof | 10774.70 | 12960.08 |
-| redis_aof | 9985.02 | 12639.03 |
+| vemory_no_aof | 13356.48 | 13002.21 |
+| vemory_aof | 10582.01 | 12835.32 |
+| redis_aof | 9984.03 | 12083.13 |
 
-Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync.
+Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync. Numbers above use `aof_io=thread` (the production path). `aof_io=iouring` exists for experimentation only and is **not recommended** for real use yet (`auto` may pick it when liburing is available).
 
 Other targets:
 

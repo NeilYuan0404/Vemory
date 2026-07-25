@@ -281,15 +281,17 @@ Run: `HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py`
 ### AOF QPS (`aof_bench.py`)
 
 Run: `python3 bench/aof_bench.py`  
-(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec` / `aof_io=thread`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
 
-ECHO (vemory_no_aof): **13958.68** rps
+ECHO (vemory_no_aof): **13989.93** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13361.84 | 13082.16 |
-| vemory_aof | 10774.70 | 12960.08 |
-| redis_aof | 9985.02 | 12639.03 |
+| vemory_no_aof | 13356.48 | 13002.21 |
+| vemory_aof | 10582.01 | 12835.32 |
+| redis_aof | 9984.03 | 12083.13 |
+
+Numbers use `aof_io=thread`. `aof_io=iouring` is experimental only — not recommended for real use.
 
 ## Notes
 

@@ -17,7 +17,7 @@ INI `[persistence]`:
 | `dir` | `data` | Shared with RDB; AOF path is `{dir}/appendonly.aof` |
 | `aof` | `false` | Enable append + startup replay |
 | `aof_fsync` | `everysec` | `no` / `everysec` / `always` (Redis-style) |
-| `aof_io` | `auto` | `auto` / `thread` / `iouring` (flush backend) |
+| `aof_io` | `thread` | `auto` / `thread` / `iouring` (flush backend; prefer `thread`) |
 | `load_on_startup` | `false` | RDB load (runs **before** AOF replay when both set) |
 
 Empty `dir` disables AOF even if `aof=true`.
@@ -27,8 +27,8 @@ Empty `dir` disables AOF even if `aof=true`.
 | Value | Behavior |
 |-------|----------|
 | `auto` | Try io_uring (needs `liburing` + capable kernel); on failure use `thread` |
-| `thread` | Bounded queue + flush thread + batched `fwrite` / one `fflush` per batch |
-| `iouring` | Same queue model; flush thread batches frames into one `io_uring` `writev` (fallback to `thread` + warn if unavailable) |
+| `thread` | Bounded queue + flush thread + batched `fwrite` / one `fflush` per batch (**recommended**) |
+| `iouring` | Same queue model; flush thread batches frames into one `io_uring` `writev` (fallback to `thread` + warn if unavailable). **Experimental — not recommended for real use yet.** |
 
 Both backends honor `aof_fsync`. Replay is always synchronous `fopen` read (not via io_uring).
 

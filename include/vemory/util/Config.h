@@ -17,9 +17,9 @@ enum class AofFsyncPolicy : uint8_t {
 
 // AOF flush backend (persistence.aof_io).
 enum class AofIoMode : uint8_t {
-  kAuto = 0,     // try io_uring, else thread (default)
-  kThread = 1,   // BlockingQueue + fwrite flush thread
-  kIoUring = 2,  // BlockingQueue + io_uring flush thread (fallback on fail)
+  kAuto = 0,     // try io_uring, else thread (experimental path via auto)
+  kThread = 1,   // BlockingQueue + fwrite flush thread (default / recommended)
+  kIoUring = 2,  // BlockingQueue + io_uring flush thread (experimental; fallback on fail)
 };
 
 // Runtime settings loaded from an INI file (or left at built-in defaults).
@@ -35,7 +35,7 @@ struct Config {
   // Append-only protobuf log under persistence_dir/appendonly.aof
   bool aof = false;
   AofFsyncPolicy aof_fsync = AofFsyncPolicy::kEverySec;
-  AofIoMode aof_io = AofIoMode::kAuto;
+  AofIoMode aof_io = AofIoMode::kThread;
 
   // Soft issues from the last LoadConfig (unknown keys/sections).
   std::vector<std::string> warnings;

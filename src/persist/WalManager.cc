@@ -1,19 +1,12 @@
 #include "vemory/persist/WalManager.h"
 
-#include <unistd.h>
-
-#include <filesystem>
-#include <utility>
+#include <cstdio>
 
 #include <spdlog/spdlog.h>
 
-#include "vemory/persist/MutationApply.h"
+#include "vemory/mutate/MutationApply.h"
 
 namespace {
-
-bool WriteExact(FILE* fp, const void* buf, std::size_t n) {
-  return std::fwrite(buf, 1, n, fp) == n;
-}
 
 bool ReadExact(FILE* fp, void* buf, std::size_t n) {
   return std::fread(buf, 1, n, fp) == n;
@@ -36,41 +29,25 @@ uint32_t ReadU32Le(const unsigned char in[4]) {
 }  // namespace
 
 WalManager::WalManager(VNodeIndex* vnode_index, KvStore* kv, std::string dir,
-                       bool enable, vemory::AofFsyncPolicy fsync)
+                       bool enable, vemory::AofFsyncPolicy fsync,
+                       vemory::AofIoMode io_mode)
     : vnode_index_(vnode_index),
       kv_(kv),
       dir_(std::move(dir)),
       enabled_(enable && !dir_.empty()),
       fsync_(fsync),
-      queue_(kQueueCapacity),
-      last_fsync_(std::chrono::steady_clock::now()) {
+      io_mode_(io_mode) {
   if (enabled_) {
     path_ = dir_ + "/" + kFileName;
-    flush_thread_ = std::thread([this] { FlushLoop(); });
+    writer_ = MakeAofWriter(path_, fsync_, io_mode_);
   }
 }
 
 WalManager::~WalManager() {
-  if (enabled_) {
-    Flush();
-    queue_.Cancel();
-    if (flush_thread_.joinable()) {
-      flush_thread_.join();
-    }
+  if (writer_ != nullptr) {
+    writer_->Stop();
+    writer_.reset();
   }
-  std::lock_guard<std::mutex> lock(file_mu_);
-  if (fp_ != nullptr) {
-    std::fclose(fp_);
-    fp_ = nullptr;
-  }
-}
-
-bool WalManager::ReadExact(FILE* fp, void* buf, std::size_t n) {
-  return ::ReadExact(fp, buf, n);
-}
-
-bool WalManager::WriteExact(FILE* fp, const void* buf, std::size_t n) {
-  return ::WriteExact(fp, buf, n);
 }
 
 void WalManager::WriteU32Le(unsigned char out[4], uint32_t v) {
@@ -81,183 +58,16 @@ uint32_t WalManager::ReadU32Le(const unsigned char in[4]) {
   return ::ReadU32Le(in);
 }
 
-void WalManager::IncPending() {
-  std::lock_guard<std::mutex> lock(drain_mu_);
-  ++pending_;
-}
-
-void WalManager::DecPending() {
-  std::lock_guard<std::mutex> lock(drain_mu_);
-  if (pending_ > 0) {
-    --pending_;
-  }
-  if (pending_ == 0) {
-    drain_cv_.notify_all();
-  }
-}
-
-WalManager::Status WalManager::EnsureOpenForAppend() {
-  if (!enabled_) {
-    return Status::kNotConfigured;
-  }
-  if (fp_ != nullptr) {
-    return Status::kOk;
-  }
-  std::error_code ec;
-  std::filesystem::create_directories(dir_, ec);
-  if (ec) {
-    return Status::kIoError;
-  }
-  fp_ = std::fopen(path_.c_str(), "ab+");
-  if (fp_ == nullptr) {
-    return Status::kIoError;
-  }
-  return Status::kOk;
-}
-
-WalManager::Status WalManager::WriteFrame(const std::string& frame) {
-  if (frame.empty()) {
-    return Status::kError;
-  }
-  if (!WriteExact(fp_, frame.data(), frame.size())) {
-    return Status::kIoError;
-  }
-  if (std::fflush(fp_) != 0) {
-    return Status::kIoError;
-  }
-  dirty_ = true;
-  return Status::kOk;
-}
-
-WalManager::Status WalManager::SyncFile() {
-  if (fsync_ == vemory::AofFsyncPolicy::kNo) {
-    return Status::kOk;
-  }
-  if (fp_ == nullptr || !dirty_) {
-    return Status::kOk;
-  }
-  const int fd = ::fileno(fp_);
-  if (fd < 0) {
-    return Status::kIoError;
-  }
-#if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
-  if (::fdatasync(fd) != 0) {
-    return Status::kIoError;
-  }
-#else
-  if (::fsync(fd) != 0) {
-    return Status::kIoError;
-  }
-#endif
-  dirty_ = false;
-  last_fsync_ = std::chrono::steady_clock::now();
-  return Status::kOk;
-}
-
-void WalManager::MaybeSyncAfterWrite() {
-  if (fsync_ == vemory::AofFsyncPolicy::kAlways) {
-    const auto st = SyncFile();
-    if (st != Status::kOk) {
-      spdlog::error("AOF fsync failed path={} status={}", path_,
-                    static_cast<int>(st));
-      io_failed_.store(true, std::memory_order_relaxed);
-    }
-    return;
-  }
-  if (fsync_ != vemory::AofFsyncPolicy::kEverySec) {
-    return;
-  }
-  const auto now = std::chrono::steady_clock::now();
-  if (now - last_fsync_ < std::chrono::seconds(1)) {
-    return;
-  }
-  const auto st = SyncFile();
-  if (st != Status::kOk) {
-    spdlog::error("AOF fsync failed path={} status={}", path_,
-                  static_cast<int>(st));
-    io_failed_.store(true, std::memory_order_relaxed);
-  }
-}
-
-void WalManager::FlushLoop() {
-  std::string frame;
-  while (true) {
-    const bool got =
-        queue_.PopWaitFor(&frame, std::chrono::seconds(1));
-    if (!got) {
-      if (queue_.cancelled()) {
-        break;
-      }
-      // Idle timeout: sync dirty tail under everysec.
-      if (fsync_ == vemory::AofFsyncPolicy::kEverySec) {
-        std::lock_guard<std::mutex> lock(file_mu_);
-        if (!io_failed_.load(std::memory_order_relaxed)) {
-          const auto st = SyncFile();
-          if (st != Status::kOk) {
-            spdlog::error("AOF fsync failed path={} status={}", path_,
-                          static_cast<int>(st));
-            io_failed_.store(true, std::memory_order_relaxed);
-            queue_.Cancel();
-          }
-        }
-      }
-      continue;
-    }
-
-    if (io_failed_.load(std::memory_order_relaxed)) {
-      DecPending();
-      continue;
-    }
-
-    {
-      std::lock_guard<std::mutex> lock(file_mu_);
-      const auto open_st = EnsureOpenForAppend();
-      if (open_st != Status::kOk) {
-        spdlog::error("AOF open failed path={} status={}", path_,
-                      static_cast<int>(open_st));
-        io_failed_.store(true, std::memory_order_relaxed);
-        DecPending();
-        queue_.Cancel();
-        while (queue_.Pop(&frame)) {
-          DecPending();
-        }
-        return;
-      }
-      const auto st = WriteFrame(frame);
-      if (st != Status::kOk) {
-        spdlog::error("AOF write failed path={} status={}", path_,
-                      static_cast<int>(st));
-        io_failed_.store(true, std::memory_order_relaxed);
-        DecPending();
-        queue_.Cancel();
-        while (queue_.Pop(&frame)) {
-          DecPending();
-        }
-        return;
-      }
-      MaybeSyncAfterWrite();
-      if (io_failed_.load(std::memory_order_relaxed)) {
-        DecPending();
-        queue_.Cancel();
-        while (queue_.Pop(&frame)) {
-          DecPending();
-        }
-        return;
-      }
-    }
-    DecPending();
-  }
+bool WalManager::ReadExact(FILE* fp, void* buf, std::size_t n) {
+  return ::ReadExact(fp, buf, n);
 }
 
 WalManager::Status WalManager::Append(const vemory::WalEntry& entry) {
-  if (!enabled_) {
+  if (!enabled_ || writer_ == nullptr) {
     return Status::kNotConfigured;
   }
-  if (io_failed_.load(std::memory_order_relaxed)) {
+  if (writer_->failed()) {
     return Status::kIoError;
-  }
-  if (queue_.cancelled()) {
-    return Status::kError;
   }
 
   std::string payload;
@@ -274,37 +84,17 @@ WalManager::Status WalManager::Append(const vemory::WalEntry& entry) {
              static_cast<uint32_t>(payload.size()));
   frame.append(payload);
 
-  IncPending();
-  if (!queue_.Push(std::move(frame))) {
-    DecPending();
-    return Status::kError;
+  if (!writer_->Enqueue(std::move(frame))) {
+    return writer_->failed() ? Status::kIoError : Status::kError;
   }
   return Status::kOk;
 }
 
 WalManager::Status WalManager::Flush() {
-  if (!enabled_) {
+  if (!enabled_ || writer_ == nullptr) {
     return Status::kOk;
   }
-  {
-    std::unique_lock<std::mutex> lock(drain_mu_);
-    drain_cv_.wait(lock, [this] { return pending_ == 0; });
-  }
-  if (io_failed_.load(std::memory_order_relaxed)) {
-    return Status::kIoError;
-  }
-  if (fsync_ != vemory::AofFsyncPolicy::kNo) {
-    std::lock_guard<std::mutex> lock(file_mu_);
-    // Force a durable sync of any written-but-not-yet-fsynced data.
-    if (fp_ != nullptr && dirty_) {
-      const auto st = SyncFile();
-      if (st != Status::kOk) {
-        io_failed_.store(true, std::memory_order_relaxed);
-        return st;
-      }
-    }
-  }
-  if (io_failed_.load(std::memory_order_relaxed)) {
+  if (!writer_->Flush()) {
     return Status::kIoError;
   }
   return Status::kOk;

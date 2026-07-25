@@ -43,6 +43,7 @@ redis-cli -p 8989
 | `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.*` |
 | `persistence` | `aof` | `false` | Protobuf AOF：`dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always`（`fdatasync`） |
+| `persistence` | `aof_io` | `auto` | `auto` / `thread` / `iouring`（刷盘后端；失败回退 thread） |
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
 

@@ -50,6 +50,7 @@ TEST(Config, Defaults) {
   EXPECT_FALSE(cfg.load_on_startup);
   EXPECT_FALSE(cfg.aof);
   EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kEverySec);
+  EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kAuto);
 }
 
 TEST(Config, LoadHappyPath) {
@@ -193,4 +194,36 @@ TEST(Config, BadAofFsync) {
   std::string err;
   EXPECT_FALSE(vemory::LoadConfig(file.path(), &cfg, &err));
   EXPECT_NE(err.find("aof_fsync"), std::string::npos);
+}
+
+TEST(Config, AofIoModes) {
+  {
+    TempIni file("[persistence]\naof_io = thread\n");
+    vemory::Config cfg;
+    std::string err;
+    ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+    EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kThread);
+  }
+  {
+    TempIni file("[persistence]\naof_io = IOURING\n");
+    vemory::Config cfg;
+    std::string err;
+    ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+    EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kIoUring);
+  }
+  {
+    TempIni file("[persistence]\naof_io = auto\n");
+    vemory::Config cfg;
+    std::string err;
+    ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+    EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kAuto);
+  }
+}
+
+TEST(Config, BadAofIo) {
+  TempIni file("[persistence]\naof_io = mmap\n");
+  vemory::Config cfg;
+  std::string err;
+  EXPECT_FALSE(vemory::LoadConfig(file.path(), &cfg, &err));
+  EXPECT_NE(err.find("aof_io"), std::string::npos);
 }

@@ -43,6 +43,7 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `persistence` | `load_on_startup` | `false` | Load `dump.*` from `dir` on startup |
 | `persistence` | `aof` | `false` | Protobuf AOF at `dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always` (`fdatasync`) |
+| `persistence` | `aof_io` | `auto` | `auto` / `thread` / `iouring` (flush backend; falls back to thread) |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
 

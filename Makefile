@@ -41,6 +41,16 @@ PROTOBUF_LIBS := -lprotobuf
 endif
 LDFLAGS  := $(PROTOBUF_LIBS)
 
+# Optional liburing for AOF io_uring backend (fallback to thread if missing).
+LIBURING_CFLAGS := $(shell pkg-config --cflags liburing 2>/dev/null)
+LIBURING_LIBS   := $(shell pkg-config --libs liburing 2>/dev/null)
+ifneq ($(LIBURING_LIBS),)
+  CXXFLAGS += -DVEMORY_HAVE_LIBURING=1 $(LIBURING_CFLAGS)
+  LDFLAGS  += $(LIBURING_LIBS)
+else
+  CXXFLAGS += -DVEMORY_HAVE_LIBURING=0
+endif
+
 PROTO_SRC := proto/VNode.proto proto/WalEntry.proto
 PROTO_GEN_CC := generated/VNode.pb.cc generated/WalEntry.pb.cc
 PROTO_GEN_H  := generated/VNode.pb.h generated/WalEntry.pb.h
@@ -51,6 +61,7 @@ SRC := $(wildcard src/net/*.cc) \
        $(wildcard src/protocol/*/*.cc) \
        $(wildcard src/storage/*.cc) \
        $(wildcard src/persist/*.cc) \
+       $(wildcard src/mutate/*.cc) \
        $(wildcard src/index/*.cc)
 
 OBJ := $(SRC:src/%.cc=$(BUILD_ROOT)/%.o) \

@@ -119,7 +119,8 @@ int main(int argc, char** argv) {
   KvStore kv;
   kv.Reserve(cfg.kv_reserve);
   SnapshotManager snapshot(&vnode_index, &kv, cfg.persistence_dir);
-  WalManager wal(&vnode_index, &kv, cfg.persistence_dir, cfg.aof, cfg.aof_fsync);
+  WalManager wal(&vnode_index, &kv, cfg.persistence_dir, cfg.aof, cfg.aof_fsync,
+                 cfg.aof_io);
 
   if (cfg.load_on_startup && !cfg.persistence_dir.empty()) {
     const auto st = snapshot.Load();

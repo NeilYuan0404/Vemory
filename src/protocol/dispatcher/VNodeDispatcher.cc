@@ -1,7 +1,7 @@
 #include "vemory/protocol/dispatcher/VNodeDispatcher.h"
 
 #include "WalEntry.pb.h"
-#include "vemory/persist/MutationApply.h"
+#include "vemory/mutate/MutationApply.h"
 #include "vemory/protocol/dispatcher/DispatchArgs.h"
 #include "vemory/protocol/resp/RespEncode.h"
 #include "vemory/storage/VNodeIndex.h"

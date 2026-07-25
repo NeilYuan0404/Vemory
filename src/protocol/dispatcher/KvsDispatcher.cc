@@ -1,7 +1,7 @@
 #include "vemory/protocol/dispatcher/KvsDispatcher.h"
 
 #include "WalEntry.pb.h"
-#include "vemory/persist/MutationApply.h"
+#include "vemory/mutate/MutationApply.h"
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/dispatcher/DispatchArgs.h"
 #include "vemory/protocol/resp/RespEncode.h"

@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "WalEntry.pb.h"
-#include "vemory/persist/MutationApply.h"
+#include "vemory/mutate/MutationApply.h"
 #include "vemory/persist/WalManager.h"
 #include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/protocol/RequestContext.h"
@@ -236,8 +236,9 @@ TEST(WalManager, AlwaysFsyncFlushOk) {
   VNodeIndex idx(32);
   KvStore kv;
   WalManager wal(&idx, &kv, dir.path(), /*enable=*/true,
-                 vemory::AofFsyncPolicy::kAlways);
+                 vemory::AofFsyncPolicy::kAlways, vemory::AofIoMode::kThread);
   EXPECT_EQ(wal.fsync_policy(), vemory::AofFsyncPolicy::kAlways);
+  EXPECT_EQ(wal.io_mode(), vemory::AofIoMode::kThread);
 
   vemory::WalEntry e;
   e.set_op(vemory::WalEntry::SET);
@@ -245,4 +246,32 @@ TEST(WalManager, AlwaysFsyncFlushOk) {
   e.set_value("v");
   ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
   ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
+}
+
+TEST(WalManager, IoUringAppendReplayOrFallback) {
+  TempDir dir;
+  VNodeIndex idx(32);
+  KvStore kv;
+  {
+    WalManager wal(&idx, &kv, dir.path(), /*enable=*/true,
+                   vemory::AofFsyncPolicy::kNo, vemory::AofIoMode::kIoUring);
+    // Requested iouring; may fall back to thread if liburing/kernel unavailable.
+    EXPECT_EQ(wal.io_mode(), vemory::AofIoMode::kIoUring);
+
+    vemory::WalEntry e;
+    e.set_op(vemory::WalEntry::SET);
+    e.set_key("uring");
+    e.set_value("ok");
+    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
+  }
+
+  VNodeIndex idx2(32);
+  KvStore kv2;
+  WalManager wal2(&idx2, &kv2, dir.path(), true, vemory::AofFsyncPolicy::kNo,
+                  vemory::AofIoMode::kThread);
+  ASSERT_EQ(wal2.Replay(), WalManager::Status::kOk);
+  std::string val;
+  ASSERT_EQ(kv2.Get("uring", &val), KvStore::Status::kOk);
+  EXPECT_EQ(val, "ok");
 }

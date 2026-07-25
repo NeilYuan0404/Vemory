@@ -177,6 +177,26 @@ bool ApplyKey(Config* cfg, const std::string& section, const std::string& key,
       }
       return false;
     }
+    if (key == "aof_io") {
+      const std::string lower = ToLower(value);
+      if (lower == "auto") {
+        cfg->aof_io = AofIoMode::kAuto;
+        return true;
+      }
+      if (lower == "thread") {
+        cfg->aof_io = AofIoMode::kThread;
+        return true;
+      }
+      if (lower == "iouring") {
+        cfg->aof_io = AofIoMode::kIoUring;
+        return true;
+      }
+      if (error != nullptr) {
+        *error = "invalid persistence.aof_io: " + value +
+                 " (expected auto|thread|iouring)";
+      }
+      return false;
+    }
   }
 
   cfg->warnings.push_back("unknown key " + section + "." + key);

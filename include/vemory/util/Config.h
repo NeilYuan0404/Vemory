@@ -8,6 +8,13 @@
 
 namespace vemory {
 
+// Redis-style AOF fsync policy (persistence.aof_fsync).
+enum class AofFsyncPolicy : uint8_t {
+  kNo = 0,       // fflush only (no fdatasync)
+  kEverySec = 1, // fdatasync at most once per second (default)
+  kAlways = 2,   // fdatasync after every frame
+};
+
 // Runtime settings loaded from an INI file (or left at built-in defaults).
 struct Config {
   uint16_t port = 6379;
@@ -20,6 +27,7 @@ struct Config {
   bool load_on_startup = false;
   // Append-only protobuf log under persistence_dir/appendonly.aof
   bool aof = false;
+  AofFsyncPolicy aof_fsync = AofFsyncPolicy::kEverySec;
 
   // Soft issues from the last LoadConfig (unknown keys/sections).
   std::vector<std::string> warnings;

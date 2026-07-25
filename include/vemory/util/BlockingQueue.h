@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <mutex>
@@ -42,6 +43,29 @@ class BlockingQueue {
     not_empty_.wait(lock, [this] { return !queue_.empty() || cancelled_; });
     if (queue_.empty()) {
       return false;
+    }
+    *value = std::move(queue_.front());
+    queue_.pop();
+    not_full_.notify_one();
+    return true;
+  }
+
+  // Wait up to `timeout` for an item. Returns true and fills *value on success.
+  // Returns false on timeout (still empty, not cancelled) or Cancel()+empty.
+  // Callers distinguish via cancelled().
+  template <typename Rep, typename Period>
+  bool PopWaitFor(T* value, const std::chrono::duration<Rep, Period>& timeout) {
+    if (value == nullptr) {
+      return false;
+    }
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (!not_empty_.wait_for(lock, timeout, [this] {
+          return !queue_.empty() || cancelled_;
+        })) {
+      return false;  // timeout
+    }
+    if (queue_.empty()) {
+      return false;  // cancelled
     }
     *value = std::move(queue_.front());
     queue_.pop();

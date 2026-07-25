@@ -81,3 +81,22 @@ TEST(BlockingQueue, CancelUnblocksFullPush) {
   EXPECT_TRUE(done.load());
   EXPECT_EQ(q.size(), 1u);  // second Push aborted
 }
+
+TEST(BlockingQueue, PopWaitForTimeout) {
+  BlockingQueue<int> q(2);
+  int v = -1;
+  const auto t0 = std::chrono::steady_clock::now();
+  EXPECT_FALSE(q.PopWaitFor(&v, std::chrono::milliseconds(40)));
+  const auto elapsed = std::chrono::steady_clock::now() - t0;
+  EXPECT_GE(elapsed, std::chrono::milliseconds(30));
+  EXPECT_FALSE(q.cancelled());
+  EXPECT_EQ(v, -1);
+}
+
+TEST(BlockingQueue, PopWaitForGetsItem) {
+  BlockingQueue<int> q(2);
+  q.Push(7);
+  int v = 0;
+  ASSERT_TRUE(q.PopWaitFor(&v, std::chrono::milliseconds(100)));
+  EXPECT_EQ(v, 7);
+}

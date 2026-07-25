@@ -49,6 +49,7 @@ TEST(Config, Defaults) {
   EXPECT_EQ(cfg.persistence_dir, "data");
   EXPECT_FALSE(cfg.load_on_startup);
   EXPECT_FALSE(cfg.aof);
+  EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kEverySec);
 }
 
 TEST(Config, LoadHappyPath) {
@@ -160,4 +161,36 @@ TEST(Config, IsValidLogLevel) {
   EXPECT_TRUE(vemory::IsValidLogLevel("off"));
   EXPECT_FALSE(vemory::IsValidLogLevel("verbose"));
   EXPECT_FALSE(vemory::IsValidLogLevel(""));
+}
+
+TEST(Config, AofFsyncPolicies) {
+  {
+    TempIni file("[persistence]\naof_fsync = no\n");
+    vemory::Config cfg;
+    std::string err;
+    ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+    EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kNo);
+  }
+  {
+    TempIni file("[persistence]\naof_fsync = EVERYSEC\n");
+    vemory::Config cfg;
+    std::string err;
+    ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+    EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kEverySec);
+  }
+  {
+    TempIni file("[persistence]\naof_fsync = always\n");
+    vemory::Config cfg;
+    std::string err;
+    ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+    EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kAlways);
+  }
+}
+
+TEST(Config, BadAofFsync) {
+  TempIni file("[persistence]\naof_fsync = sometimes\n");
+  vemory::Config cfg;
+  std::string err;
+  EXPECT_FALSE(vemory::LoadConfig(file.path(), &cfg, &err));
+  EXPECT_NE(err.find("aof_fsync"), std::string::npos);
 }

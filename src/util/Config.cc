@@ -157,6 +157,26 @@ bool ApplyKey(Config* cfg, const std::string& section, const std::string& key,
       cfg->aof = v;
       return true;
     }
+    if (key == "aof_fsync") {
+      const std::string lower = ToLower(value);
+      if (lower == "no") {
+        cfg->aof_fsync = AofFsyncPolicy::kNo;
+        return true;
+      }
+      if (lower == "everysec") {
+        cfg->aof_fsync = AofFsyncPolicy::kEverySec;
+        return true;
+      }
+      if (lower == "always") {
+        cfg->aof_fsync = AofFsyncPolicy::kAlways;
+        return true;
+      }
+      if (error != nullptr) {
+        *error = "invalid persistence.aof_fsync: " + value +
+                 " (expected no|everysec|always)";
+      }
+      return false;
+    }
   }
 
   cfg->warnings.push_back("unknown key " + section + "." + key);

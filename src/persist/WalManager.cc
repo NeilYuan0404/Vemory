@@ -1,5 +1,7 @@
 #include "vemory/persist/WalManager.h"
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <utility>
 
@@ -34,12 +36,14 @@ uint32_t ReadU32Le(const unsigned char in[4]) {
 }  // namespace
 
 WalManager::WalManager(VNodeIndex* vnode_index, KvStore* kv, std::string dir,
-                       bool enable)
+                       bool enable, vemory::AofFsyncPolicy fsync)
     : vnode_index_(vnode_index),
       kv_(kv),
       dir_(std::move(dir)),
       enabled_(enable && !dir_.empty()),
-      queue_(kQueueCapacity) {
+      fsync_(fsync),
+      queue_(kQueueCapacity),
+      last_fsync_(std::chrono::steady_clock::now()) {
   if (enabled_) {
     path_ = dir_ + "/" + kFileName;
     flush_thread_ = std::thread([this] { FlushLoop(); });
@@ -54,6 +58,7 @@ WalManager::~WalManager() {
       flush_thread_.join();
     }
   }
+  std::lock_guard<std::mutex> lock(file_mu_);
   if (fp_ != nullptr) {
     std::fclose(fp_);
     fp_ = nullptr;
@@ -120,40 +125,127 @@ WalManager::Status WalManager::WriteFrame(const std::string& frame) {
   if (std::fflush(fp_) != 0) {
     return Status::kIoError;
   }
+  dirty_ = true;
   return Status::kOk;
+}
+
+WalManager::Status WalManager::SyncFile() {
+  if (fsync_ == vemory::AofFsyncPolicy::kNo) {
+    return Status::kOk;
+  }
+  if (fp_ == nullptr || !dirty_) {
+    return Status::kOk;
+  }
+  const int fd = ::fileno(fp_);
+  if (fd < 0) {
+    return Status::kIoError;
+  }
+#if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
+  if (::fdatasync(fd) != 0) {
+    return Status::kIoError;
+  }
+#else
+  if (::fsync(fd) != 0) {
+    return Status::kIoError;
+  }
+#endif
+  dirty_ = false;
+  last_fsync_ = std::chrono::steady_clock::now();
+  return Status::kOk;
+}
+
+void WalManager::MaybeSyncAfterWrite() {
+  if (fsync_ == vemory::AofFsyncPolicy::kAlways) {
+    const auto st = SyncFile();
+    if (st != Status::kOk) {
+      spdlog::error("AOF fsync failed path={} status={}", path_,
+                    static_cast<int>(st));
+      io_failed_.store(true, std::memory_order_relaxed);
+    }
+    return;
+  }
+  if (fsync_ != vemory::AofFsyncPolicy::kEverySec) {
+    return;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  if (now - last_fsync_ < std::chrono::seconds(1)) {
+    return;
+  }
+  const auto st = SyncFile();
+  if (st != Status::kOk) {
+    spdlog::error("AOF fsync failed path={} status={}", path_,
+                  static_cast<int>(st));
+    io_failed_.store(true, std::memory_order_relaxed);
+  }
 }
 
 void WalManager::FlushLoop() {
   std::string frame;
-  while (queue_.Pop(&frame)) {
+  while (true) {
+    const bool got =
+        queue_.PopWaitFor(&frame, std::chrono::seconds(1));
+    if (!got) {
+      if (queue_.cancelled()) {
+        break;
+      }
+      // Idle timeout: sync dirty tail under everysec.
+      if (fsync_ == vemory::AofFsyncPolicy::kEverySec) {
+        std::lock_guard<std::mutex> lock(file_mu_);
+        if (!io_failed_.load(std::memory_order_relaxed)) {
+          const auto st = SyncFile();
+          if (st != Status::kOk) {
+            spdlog::error("AOF fsync failed path={} status={}", path_,
+                          static_cast<int>(st));
+            io_failed_.store(true, std::memory_order_relaxed);
+            queue_.Cancel();
+          }
+        }
+      }
+      continue;
+    }
+
     if (io_failed_.load(std::memory_order_relaxed)) {
       DecPending();
       continue;
     }
-    const auto open_st = EnsureOpenForAppend();
-    if (open_st != Status::kOk) {
-      spdlog::error("AOF open failed path={} status={}", path_,
-                    static_cast<int>(open_st));
-      io_failed_.store(true, std::memory_order_relaxed);
-      DecPending();
-      queue_.Cancel();
-      while (queue_.Pop(&frame)) {
+
+    {
+      std::lock_guard<std::mutex> lock(file_mu_);
+      const auto open_st = EnsureOpenForAppend();
+      if (open_st != Status::kOk) {
+        spdlog::error("AOF open failed path={} status={}", path_,
+                      static_cast<int>(open_st));
+        io_failed_.store(true, std::memory_order_relaxed);
         DecPending();
+        queue_.Cancel();
+        while (queue_.Pop(&frame)) {
+          DecPending();
+        }
+        return;
       }
-      return;
+      const auto st = WriteFrame(frame);
+      if (st != Status::kOk) {
+        spdlog::error("AOF write failed path={} status={}", path_,
+                      static_cast<int>(st));
+        io_failed_.store(true, std::memory_order_relaxed);
+        DecPending();
+        queue_.Cancel();
+        while (queue_.Pop(&frame)) {
+          DecPending();
+        }
+        return;
+      }
+      MaybeSyncAfterWrite();
+      if (io_failed_.load(std::memory_order_relaxed)) {
+        DecPending();
+        queue_.Cancel();
+        while (queue_.Pop(&frame)) {
+          DecPending();
+        }
+        return;
+      }
     }
-    const auto st = WriteFrame(frame);
     DecPending();
-    if (st != Status::kOk) {
-      spdlog::error("AOF write failed path={} status={}", path_,
-                    static_cast<int>(st));
-      io_failed_.store(true, std::memory_order_relaxed);
-      queue_.Cancel();
-      while (queue_.Pop(&frame)) {
-        DecPending();
-      }
-      return;
-    }
   }
 }
 
@@ -194,8 +286,24 @@ WalManager::Status WalManager::Flush() {
   if (!enabled_) {
     return Status::kOk;
   }
-  std::unique_lock<std::mutex> lock(drain_mu_);
-  drain_cv_.wait(lock, [this] { return pending_ == 0; });
+  {
+    std::unique_lock<std::mutex> lock(drain_mu_);
+    drain_cv_.wait(lock, [this] { return pending_ == 0; });
+  }
+  if (io_failed_.load(std::memory_order_relaxed)) {
+    return Status::kIoError;
+  }
+  if (fsync_ != vemory::AofFsyncPolicy::kNo) {
+    std::lock_guard<std::mutex> lock(file_mu_);
+    // Force a durable sync of any written-but-not-yet-fsynced data.
+    if (fp_ != nullptr && dirty_) {
+      const auto st = SyncFile();
+      if (st != Status::kOk) {
+        io_failed_.store(true, std::memory_order_relaxed);
+        return st;
+      }
+    }
+  }
   if (io_failed_.load(std::memory_order_relaxed)) {
     return Status::kIoError;
   }

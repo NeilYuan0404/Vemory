@@ -139,13 +139,16 @@ Does **not** start/stop servers. Use separate `persistence.dir` for the AOF Vemo
 # Terminal B — Vemory AOF (port 8990, aof=true, dir=data_aof_bench)
 ./bin/vemory -c conf/vemory_aof_bench.ini
 
-# Terminal C — Redis with AOF
+# Terminal C — Redis with AOF everysec (default appendfsync)
 redis-server --port 6379 --appendonly yes
 # or: redis-cli CONFIG SET appendonly yes
+#     redis-cli CONFIG SET appendfsync everysec
 
 python3 bench/aof_bench.py
 N=10000 VEMORY_PORT=8989 VEMORY_AOF_PORT=8990 REDIS_PORT=6379 python3 bench/aof_bench.py
 ```
+
+Fair compare: Vemory AOF uses `aof_fsync=everysec` ([`conf/vemory_aof_bench.ini`](../conf/vemory_aof_bench.ini)); Redis uses `appendfsync everysec`.
 
 | Env | Default | Meaning |
 |-----|---------|---------|
@@ -278,15 +281,15 @@ Run: `HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py`
 ### AOF QPS (`aof_bench.py`)
 
 Run: `python3 bench/aof_bench.py`  
-(release `bin/vemory`; `c=1 P=1`, `N=100000`; no-AOF `:8989`, AOF `:8990` / `conf/vemory_aof_bench.ini`, Redis `appendonly yes` `:6379`)
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
 
-ECHO (vemory_no_aof): **13509.86** rps
+ECHO (vemory_no_aof): **13958.68** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13113.03 | 12573.87 |
-| vemory_aof | 8722.20 | 12828.74 |
-| redis_aof | 9790.48 | 12682.31 |
+| vemory_no_aof | 13361.84 | 13082.16 |
+| vemory_aof | 10774.70 | 12960.08 |
+| redis_aof | 9985.02 | 12639.03 |
 
 ## Notes
 

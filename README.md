@@ -42,10 +42,11 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `persistence` | `dir` | `data` | RDB snapshot directory; empty disables `SAVE` |
 | `persistence` | `load_on_startup` | `false` | Load `dump.*` from `dir` on startup |
 | `persistence` | `aof` | `false` | Protobuf AOF at `dir/appendonly.aof` |
+| `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always` (`fdatasync`) |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
 
-Snapshot files (multi-file) under `data/` by default: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`. `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (encode on the request path, flush thread writes `appendonly.aof`).
+Snapshot files (multi-file) under `data/` by default: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`. `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (encode on the request path, flush thread writes `appendonly.aof`; `aof_fsync` controls durability).
 
 Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 
@@ -117,17 +118,17 @@ SET via `redis-benchmark` (`c=1 p=1`); SAVE via `redis-cli` between chunks. Indi
 ### Latest AOF QPS
 
 Run: `python3 bench/aof_bench.py`  
-(release `bin/vemory`; `c=1 P=1`, `N=100000`; Vemory no-AOF `:8989`, AOF `:8990` / `conf/vemory_aof_bench.ini`, Redis `appendonly yes` `:6379`)
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; Vemory no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
 
-ECHO (vemory_no_aof): **13509.86** rps
+ECHO (vemory_no_aof): **13958.68** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13113.03 | 12573.87 |
-| vemory_aof | 8722.20 | 12828.74 |
-| redis_aof | 9790.48 | 12682.31 |
+| vemory_no_aof | 13361.84 | 13082.16 |
+| vemory_aof | 10774.70 | 12960.08 |
+| redis_aof | 9985.02 | 12639.03 |
 
-Indicative only — single-threaded event loop; AOF write path differs from Redis.
+Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync.
 
 Other targets:
 

@@ -4,6 +4,13 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- AOF fsync policy: INI `persistence.aof_fsync` = `no` | `everysec` (default) | `always` (`fdatasync` on the flush thread)
+
+### Changed
+- AOF flush thread uses timed queue pop so `everysec` can sync a dirty tail while idle
+- Bench config [`conf/vemory_aof_bench.ini`](conf/vemory_aof_bench.ini) uses `aof_fsync = everysec` (aligned with Redis `appendfsync everysec`)
+
 ## [0.4.0] — 2026-07-24
 
 Optional protobuf AOF (WAL) with background flush.
@@ -17,8 +24,8 @@ Optional protobuf AOF (WAL) with background flush.
 - Config: [`conf/vemory_aof_bench.ini`](conf/vemory_aof_bench.ini) for the AOF bench instance
 
 ### Limits
-- AOF has no io_uring / everysec fsync yet; crash may lose queued frames and OS buffers; no AOF rewrite after SAVE
-- `Append` success means enqueued, not durable on disk
+- AOF has no io_uring yet; no AOF rewrite after SAVE
+- `Append` success means enqueued, not durable on disk (use `aof_fsync`; see Unreleased)
 - Not Redis AOF / RESP format
 
 ## [0.3.0] — 2026-07-23

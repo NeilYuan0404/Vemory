@@ -217,7 +217,8 @@ TEST(Config, AofKey) {
     std::fputs(
         "[persistence]\n"
         "dir = /tmp/x\n"
-        "aof = true\n",
+        "aof = true\n"
+        "aof_fsync = always\n",
         fp);
     std::fclose(fp);
   }
@@ -226,5 +227,22 @@ TEST(Config, AofKey) {
   ASSERT_TRUE(vemory::LoadConfig(path, &cfg, &err)) << err;
   EXPECT_TRUE(cfg.aof);
   EXPECT_EQ(cfg.persistence_dir, "/tmp/x");
+  EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kAlways);
   ::unlink(path);
+}
+
+TEST(WalManager, AlwaysFsyncFlushOk) {
+  TempDir dir;
+  VNodeIndex idx(32);
+  KvStore kv;
+  WalManager wal(&idx, &kv, dir.path(), /*enable=*/true,
+                 vemory::AofFsyncPolicy::kAlways);
+  EXPECT_EQ(wal.fsync_policy(), vemory::AofFsyncPolicy::kAlways);
+
+  vemory::WalEntry e;
+  e.set_op(vemory::WalEntry::SET);
+  e.set_key("k");
+  e.set_value("v");
+  ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+  ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
 }

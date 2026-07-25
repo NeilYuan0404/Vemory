@@ -4,11 +4,16 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-07-25
+
+AOF durability controls, pluggable flush backends, and batched writes.
+
 ### Added
 - AOF fsync policy: INI `persistence.aof_fsync` = `no` | `everysec` (default) | `always` (`fdatasync` after each flush batch on the writer thread)
 - AOF IO backend: INI `persistence.aof_io` = `thread` (default) | `auto` | `iouring`; `AofWriter` abstraction (`ThreadAofWriter` / optional `IoUringAofWriter` via `liburing`). `iouring` is experimental — prefer `thread` for real use.
 
 ### Changed
+- AOF flush thread batches up to 32 frames per write (`fwrite`+one `fflush`, or `io_uring` `writev`)
 - AOF flush thread uses timed queue pop so `everysec` can sync a dirty tail while idle
 - Default / bench `aof_io` is `thread` (was `auto`, which could select experimental io_uring)
 - Bench config [`conf/vemory_aof_bench.ini`](conf/vemory_aof_bench.ini) uses `aof_fsync = everysec` (aligned with Redis `appendfsync everysec`)
@@ -27,7 +32,7 @@ Optional protobuf AOF (WAL) with background flush.
 
 ### Limits
 - No AOF rewrite after SAVE
-- `Append` success means enqueued, not durable on disk (use `aof_fsync`; see Unreleased)
+- `Append` success means enqueued, not durable on disk (use `aof_fsync`; see 0.4.1)
 - Not Redis AOF / RESP format
 
 ## [0.3.0] — 2026-07-23

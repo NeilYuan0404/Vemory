@@ -5,7 +5,7 @@ All notable changes to Vemory are documented in this file.
 ## [Unreleased]
 
 ### Added
-- AOF fsync policy: INI `persistence.aof_fsync` = `no` | `everysec` (default) | `always` (`fdatasync` on the flush thread)
+- AOF fsync policy: INI `persistence.aof_fsync` = `no` | `everysec` (default) | `always` (`fdatasync` after each flush batch on the writer thread)
 - AOF IO backend: INI `persistence.aof_io` = `auto` (default) | `thread` | `iouring`; `AofWriter` abstraction (`ThreadAofWriter` / optional `IoUringAofWriter` via `liburing`)
 
 ### Changed

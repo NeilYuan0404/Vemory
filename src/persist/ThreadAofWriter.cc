@@ -31,9 +31,15 @@ void ThreadAofWriter::IncPending() {
 }
 
 void ThreadAofWriter::DecPending() {
+  DecPendingN(1);
+}
+
+void ThreadAofWriter::DecPendingN(std::size_t n) {
   std::lock_guard<std::mutex> lock(drain_mu_);
-  if (pending_ > 0) {
-    --pending_;
+  if (n >= pending_) {
+    pending_ = 0;
+  } else {
+    pending_ -= n;
   }
   if (pending_ == 0) {
     drain_cv_.notify_all();
@@ -56,12 +62,17 @@ bool ThreadAofWriter::EnsureOpen() {
   return fp_ != nullptr;
 }
 
-bool ThreadAofWriter::WriteFrame(const std::string& frame) {
-  if (frame.empty()) {
+bool ThreadAofWriter::WriteBatch(const std::string* frames, std::size_t n) {
+  if (frames == nullptr || n == 0) {
     return false;
   }
-  if (!WriteExact(fp_, frame.data(), frame.size())) {
-    return false;
+  for (std::size_t i = 0; i < n; ++i) {
+    if (frames[i].empty()) {
+      return false;
+    }
+    if (!WriteExact(fp_, frames[i].data(), frames[i].size())) {
+      return false;
+    }
   }
   if (std::fflush(fp_) != 0) {
     return false;
@@ -95,7 +106,7 @@ bool ThreadAofWriter::SyncFile() {
   return true;
 }
 
-void ThreadAofWriter::MaybeSyncAfterWrite() {
+void ThreadAofWriter::MaybeSyncAfterBatch() {
   if (fsync_ == vemory::AofFsyncPolicy::kAlways) {
     if (!SyncFile()) {
       spdlog::error("AOF fsync failed path={}", path_);
@@ -117,9 +128,9 @@ void ThreadAofWriter::MaybeSyncAfterWrite() {
 }
 
 void ThreadAofWriter::FlushLoop() {
-  std::string frame;
+  std::string batch[kMaxBatch];
   while (true) {
-    const bool got = queue_.PopWaitFor(&frame, std::chrono::seconds(1));
+    const bool got = queue_.PopWaitFor(&batch[0], std::chrono::seconds(1));
     if (!got) {
       if (queue_.cancelled()) {
         break;
@@ -137,8 +148,14 @@ void ThreadAofWriter::FlushLoop() {
       continue;
     }
 
+    std::size_t n = 1;
+    while (n < kMaxBatch &&
+           queue_.PopWaitFor(&batch[n], std::chrono::milliseconds(0))) {
+      ++n;
+    }
+
     if (io_failed_.load(std::memory_order_relaxed)) {
-      DecPending();
+      DecPendingN(n);
       continue;
     }
 
@@ -147,34 +164,37 @@ void ThreadAofWriter::FlushLoop() {
       if (!EnsureOpen()) {
         spdlog::error("AOF open failed path={}", path_);
         io_failed_.store(true, std::memory_order_relaxed);
-        DecPending();
+        DecPendingN(n);
         queue_.Cancel();
+        std::string frame;
         while (queue_.Pop(&frame)) {
           DecPending();
         }
         return;
       }
-      if (!WriteFrame(frame)) {
+      if (!WriteBatch(batch, n)) {
         spdlog::error("AOF write failed path={}", path_);
         io_failed_.store(true, std::memory_order_relaxed);
-        DecPending();
+        DecPendingN(n);
         queue_.Cancel();
+        std::string frame;
         while (queue_.Pop(&frame)) {
           DecPending();
         }
         return;
       }
-      MaybeSyncAfterWrite();
+      MaybeSyncAfterBatch();
       if (io_failed_.load(std::memory_order_relaxed)) {
-        DecPending();
+        DecPendingN(n);
         queue_.Cancel();
+        std::string frame;
         while (queue_.Pop(&frame)) {
           DecPending();
         }
         return;
       }
     }
-    DecPending();
+    DecPendingN(n);
   }
 }
 

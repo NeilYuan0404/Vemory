@@ -45,6 +45,40 @@ class TempDir {
   std::string path_;
 };
 
+// > kMaxBatch (32) so flush covers at least one full batch plus a remainder.
+void AppendManyFlushReplay(vemory::AofIoMode io_mode) {
+  constexpr int kCount = 40;
+  TempDir dir;
+  {
+    VNodeIndex idx(32);
+    KvStore kv;
+    WalManager wal(&idx, &kv, dir.path(), /*enable=*/true,
+                   vemory::AofFsyncPolicy::kNo, io_mode);
+    EXPECT_EQ(wal.io_mode(), io_mode);
+
+    for (int i = 0; i < kCount; ++i) {
+      vemory::WalEntry e;
+      e.set_op(vemory::WalEntry::SET);
+      e.set_key("k" + std::to_string(i));
+      e.set_value("v" + std::to_string(i));
+      ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    }
+    ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
+  }
+
+  VNodeIndex idx2(32);
+  KvStore kv2;
+  WalManager wal2(&idx2, &kv2, dir.path(), true, vemory::AofFsyncPolicy::kNo,
+                  vemory::AofIoMode::kThread);
+  ASSERT_EQ(wal2.Replay(), WalManager::Status::kOk);
+  for (int i = 0; i < kCount; ++i) {
+    std::string val;
+    ASSERT_EQ(kv2.Get("k" + std::to_string(i), &val), KvStore::Status::kOk)
+        << "missing key k" << i;
+    EXPECT_EQ(val, "v" + std::to_string(i));
+  }
+}
+
 }  // namespace
 
 TEST(WalEntry, ProtobufRoundTrip) {
@@ -274,4 +308,13 @@ TEST(WalManager, IoUringAppendReplayOrFallback) {
   std::string val;
   ASSERT_EQ(kv2.Get("uring", &val), KvStore::Status::kOk);
   EXPECT_EQ(val, "ok");
+}
+
+TEST(WalManager, ThreadBatchAppendReplay) {
+  AppendManyFlushReplay(vemory::AofIoMode::kThread);
+}
+
+TEST(WalManager, IoUringBatchAppendReplayOrFallback) {
+  // May fall back to thread writer if liburing/kernel unavailable.
+  AppendManyFlushReplay(vemory::AofIoMode::kIoUring);
 }

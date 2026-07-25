@@ -12,7 +12,7 @@
 #include "vemory/util/BlockingQueue.h"
 #include "vemory/util/Config.h"
 
-// Classic AOF flush: BlockingQueue + background thread + fwrite/fflush/fdatasync.
+// Classic AOF flush: BlockingQueue + background thread + batched fwrite/fflush/fdatasync.
 class ThreadAofWriter final : public AofWriter {
  public:
   ThreadAofWriter(std::string path, vemory::AofFsyncPolicy fsync);
@@ -30,14 +30,17 @@ class ThreadAofWriter final : public AofWriter {
 
  private:
   static constexpr std::size_t kQueueCapacity = 1024;
+  static constexpr std::size_t kMaxBatch = 32;
 
   void FlushLoop();
   bool EnsureOpen();  // caller holds file_mu_
-  bool WriteFrame(const std::string& frame);  // caller holds file_mu_
+  // Write n frames with one fflush at the end. Caller holds file_mu_.
+  bool WriteBatch(const std::string* frames, std::size_t n);
   bool SyncFile();  // caller holds file_mu_
-  void MaybeSyncAfterWrite();  // caller holds file_mu_
+  void MaybeSyncAfterBatch();  // caller holds file_mu_
   void IncPending();
   void DecPending();
+  void DecPendingN(std::size_t n);
 
   std::string path_;
   vemory::AofFsyncPolicy fsync_;

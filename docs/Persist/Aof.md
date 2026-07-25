@@ -2,7 +2,7 @@
 
 Append-only protobuf log of write mutations. Complements multi-file RDB snapshots ([`Snapshot.md`](Snapshot.md)).
 
-Live path: successful `SET` / `DEL` / `VSET` / `VDEL` → `ApplyMutation` → `WalManager::Append` (encode + enqueue) → `AofWriter` background thread (`thread` fwrite or `io_uring` write), then optional `fdatasync` per `aof_fsync`.
+Live path: successful `SET` / `DEL` / `VSET` / `VDEL` → `ApplyMutation` → `WalManager::Append` (encode + enqueue) → `AofWriter` background thread (batched `thread` fwrite or `io_uring` writev), then optional `fdatasync` per `aof_fsync`.
 
 Startup: optional `SnapshotManager::Load`, then `WalManager::Replay` (`MutateSource::kAofReplay` does **not** re-append).
 
@@ -27,8 +27,8 @@ Empty `dir` disables AOF even if `aof=true`.
 | Value | Behavior |
 |-------|----------|
 | `auto` | Try io_uring (needs `liburing` + capable kernel); on failure use `thread` |
-| `thread` | Bounded queue + flush thread + `fwrite` / `fflush` |
-| `iouring` | Same queue model; flush thread submits `io_uring` writes (fallback to `thread` + warn if unavailable) |
+| `thread` | Bounded queue + flush thread + batched `fwrite` / one `fflush` per batch |
+| `iouring` | Same queue model; flush thread batches frames into one `io_uring` `writev` (fallback to `thread` + warn if unavailable) |
 
 Both backends honor `aof_fsync`. Replay is always synchronous `fopen` read (not via io_uring).
 
@@ -38,7 +38,7 @@ Both backends honor `aof_fsync`. Replay is always synchronous `fopen` read (not 
 |-------|----------|
 | `no` | `fflush` only (kernel page cache; max throughput / benches) |
 | `everysec` | `fdatasync` at most once per second; idle flush thread wakes to sync a dirty tail |
-| `always` | `fdatasync` after every frame |
+| `always` | `fdatasync` after every flush batch (up to 32 frames) |
 
 `Append` success means enqueued, not durable. Under `everysec`, a crash may lose up to ~1s of acknowledged writes (plus any still-queued frames).
 
@@ -90,7 +90,7 @@ DEL/VDEL miss (`integer_reply == 0`) does not append.
 | `ApplyMutation` | `include/vemory/mutate/MutationApply.h`（共享突变层，非 AOF writer） |
 | `BlockingQueue` | `include/vemory/util/BlockingQueue.h` |
 
-`Append` serializes on the caller thread and enqueues a complete frame via `AofWriter` (capacity 1024; full → block). The writer’s flush thread pops (1s timed wait) and writes (`fwrite` or `io_uring`), then applies `aof_fsync`. `Flush()` waits until pending frames are written and then `fdatasync` when policy ≠ `no`.
+`Append` serializes on the caller thread and enqueues a complete frame via `AofWriter` (capacity 1024; full → block). The writer’s flush thread pops (1s timed wait), non-blocking-drains up to 32 frames, writes one batch (`fwrite`+`fflush` or `io_uring` `writev`), then applies `aof_fsync`. `Flush()` waits until pending frames are written and then `fdatasync` when policy ≠ `no`.
 
 ---
 

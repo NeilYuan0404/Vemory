@@ -6,6 +6,7 @@
 
 #include <fcntl.h>
 #include <liburing.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -99,6 +100,7 @@ class IoUringAofWriter final : public AofWriter {
 
  private:
   static constexpr std::size_t kQueueCapacity = 1024;
+  static constexpr std::size_t kMaxBatch = 32;
   static constexpr unsigned kRingEntries = 32;
 
   IoUringAofWriter(std::string path, vemory::AofFsyncPolicy fsync)
@@ -140,10 +142,14 @@ class IoUringAofWriter final : public AofWriter {
     ++pending_;
   }
 
-  void DecPending() {
+  void DecPending() { DecPendingN(1); }
+
+  void DecPendingN(std::size_t n) {
     std::lock_guard<std::mutex> lock(drain_mu_);
-    if (pending_ > 0) {
-      --pending_;
+    if (n >= pending_) {
+      pending_ = 0;
+    } else {
+      pending_ -= n;
     }
     if (pending_ == 0) {
       drain_cv_.notify_all();
@@ -171,16 +177,28 @@ class IoUringAofWriter final : public AofWriter {
     return true;
   }
 
-  bool WriteFrameUring(const std::string& frame) {
-    if (frame.empty() || fd_ < 0 || !ring_inited_) {
+  // Keep frame buffers alive until CQE returns (batch[] in FlushLoop).
+  bool WriteBatchUring(const std::string* frames, std::size_t n) {
+    if (frames == nullptr || n == 0 || fd_ < 0 || !ring_inited_) {
       return false;
     }
-    // Keep buffer alive until CQE (frame is a local in FlushLoop — wait inline).
+
+    struct iovec iov[kMaxBatch];
+    std::size_t total = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+      if (frames[i].empty()) {
+        return false;
+      }
+      iov[i].iov_base = const_cast<char*>(frames[i].data());
+      iov[i].iov_len = frames[i].size();
+      total += frames[i].size();
+    }
+
     struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
     if (sqe == nullptr) {
       return false;
     }
-    io_uring_prep_write(sqe, fd_, frame.data(), frame.size(), 0);
+    io_uring_prep_writev(sqe, fd_, iov, static_cast<unsigned>(n), 0);
     io_uring_sqe_set_data(sqe, nullptr);
     if (io_uring_submit_and_wait(&ring_, 1) < 0) {
       return false;
@@ -191,14 +209,14 @@ class IoUringAofWriter final : public AofWriter {
     }
     const int res = cqe->res;
     io_uring_cqe_seen(&ring_, cqe);
-    if (res < 0 || static_cast<std::size_t>(res) != frame.size()) {
+    if (res < 0 || static_cast<std::size_t>(res) != total) {
       return false;
     }
     dirty_ = true;
     return true;
   }
 
-  void MaybeSyncAfterWrite() {
+  void MaybeSyncAfterBatch() {
     if (fsync_ == vemory::AofFsyncPolicy::kAlways) {
       if (!SyncFile()) {
         spdlog::error("AOF fsync failed path={}", path_);
@@ -220,9 +238,9 @@ class IoUringAofWriter final : public AofWriter {
   }
 
   void FlushLoop() {
-    std::string frame;
+    std::string batch[kMaxBatch];
     while (true) {
-      const bool got = queue_.PopWaitFor(&frame, std::chrono::seconds(1));
+      const bool got = queue_.PopWaitFor(&batch[0], std::chrono::seconds(1));
       if (!got) {
         if (queue_.cancelled()) {
           break;
@@ -240,34 +258,42 @@ class IoUringAofWriter final : public AofWriter {
         continue;
       }
 
+      std::size_t n = 1;
+      while (n < kMaxBatch &&
+             queue_.PopWaitFor(&batch[n], std::chrono::milliseconds(0))) {
+        ++n;
+      }
+
       if (io_failed_.load(std::memory_order_relaxed)) {
-        DecPending();
+        DecPendingN(n);
         continue;
       }
 
       {
         std::lock_guard<std::mutex> lock(file_mu_);
-        if (!WriteFrameUring(frame)) {
+        if (!WriteBatchUring(batch, n)) {
           spdlog::error("AOF io_uring write failed path={}", path_);
           io_failed_.store(true, std::memory_order_relaxed);
-          DecPending();
+          DecPendingN(n);
           queue_.Cancel();
+          std::string frame;
           while (queue_.Pop(&frame)) {
             DecPending();
           }
           return;
         }
-        MaybeSyncAfterWrite();
+        MaybeSyncAfterBatch();
         if (io_failed_.load(std::memory_order_relaxed)) {
-          DecPending();
+          DecPendingN(n);
           queue_.Cancel();
+          std::string frame;
           while (queue_.Pop(&frame)) {
             DecPending();
           }
           return;
         }
       }
-      DecPending();
+      DecPendingN(n);
     }
   }
 

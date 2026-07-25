@@ -12,7 +12,7 @@ namespace vemory {
 enum class AofFsyncPolicy : uint8_t {
   kNo = 0,       // fflush only (no fdatasync)
   kEverySec = 1, // fdatasync at most once per second (default)
-  kAlways = 2,   // fdatasync after every frame
+  kAlways = 2,   // fdatasync after every flush batch
 };
 
 // AOF flush backend (persistence.aof_io).

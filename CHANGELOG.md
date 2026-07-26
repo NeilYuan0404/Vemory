@@ -2,10 +2,19 @@
 
 All notable changes to Vemory are documented in this file.
 
-## [Unreleased]
+## [0.5.1] — 2026-07-27
+
+Default process heap via gperftools tcmalloc (build-time), plus an RSS/VIRT compare bench.
+
+### Added
+- Build links gperftools `libtcmalloc_minimal` by default for STL / protobuf / `new` (`TCMALLOC=0` to use the system allocator); usearch vector tape stays on its mmap arenas
+- Bench: [`bench/tcmalloc_mem_bench.py`](bench/tcmalloc_mem_bench.py) (tcmalloc on/off SET→DEL RSS/VIRT table); results in README
 
 ### Changed
-- Build links gperftools `libtcmalloc_minimal` by default for the process heap (`TCMALLOC=0` to disable); usearch vector storage remains on its mmap arenas
+- `make clean` / `proto` / `*-fetch` / `compile-commands` skip the tcmalloc link probe so cleanup works without gperftools installed
+
+### Notes
+- New build dependency when `TCMALLOC=1` (default): Debian/Ubuntu `libgoogle-perftools-dev`, or set `PKG_CONFIG_PATH` if gperftools lives under a custom prefix (e.g. `~/.local`)
 
 ## [0.5.0] — 2026-07-26
 

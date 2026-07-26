@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Semantic-cache RDB SAVE smoke: VSET → SAVE → dump.* → VGET.
+"""Semantic-cache RDB SAVE smoke: VSET → SAVE → dump.rdb → VGET.
 
 Requires a running Vemory with persistence.dir set (default data/), and
 redis-py (pip install redis, or bench/.venv).
@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DUMP_DIR = Path(os.environ.get("DUMP_DIR", str(ROOT / "data")))
 SAVE_TIMEOUT_S = float(os.environ.get("SAVE_TIMEOUT_S", "10"))
 
-DUMP_FILES = ("dump.meta", "dump.kv", "dump.nodes", "dump.usearch")
+DUMP_FILES = ("dump.rdb",)
 KEY_PREFIX = "smokerdb:"
 
 
@@ -47,25 +47,20 @@ def synth_vec(dim: int, seed: int) -> list[float]:
 
 def wait_for_dumps(timeout_s: float) -> None:
     deadline = time.time() + timeout_s
+    rdb = DUMP_DIR / "dump.rdb"
     while time.time() < deadline:
-        if all((DUMP_DIR / name).is_file() for name in DUMP_FILES):
-            # Background SAVE: files may appear mid-write; require non-empty
-            # usearch (vectors present) and meta.
-            usearch = DUMP_DIR / "dump.usearch"
-            meta = DUMP_DIR / "dump.meta"
-            if usearch.stat().st_size > 0 and meta.stat().st_size > 0:
-                return
+        # Background SAVE: tmp may rename late; require non-empty dump.rdb.
+        if rdb.is_file() and rdb.stat().st_size > 0:
+            return
         time.sleep(0.05)
-    missing = []
-    for name in DUMP_FILES:
-        path = DUMP_DIR / name
-        if not path.is_file():
-            missing.append(f"{name} (missing)")
-        elif path.stat().st_size == 0 and name in ("dump.meta", "dump.usearch"):
-            missing.append(f"{name} (empty)")
+    if not rdb.is_file():
+        die(
+            f"dump files not ready under {DUMP_DIR} within {timeout_s}s: "
+            f"dump.rdb (missing)"
+        )
     die(
         f"dump files not ready under {DUMP_DIR} within {timeout_s}s: "
-        f"{missing or 'timeout'}"
+        f"dump.rdb (empty)"
     )
 
 
@@ -115,10 +110,10 @@ def main() -> int:
         if "already in progress" in msg:
             die("SAVE failed: background save already in progress; retry")
         die(f"SAVE failed: {exc}")
-    print("    +OK (waiting for dump.* ...)")
+    print("    +OK (waiting for dump.rdb ...)")
     wait_for_dumps(SAVE_TIMEOUT_S)
 
-    print("==> snapshot files")
+    print("==> snapshot file")
     for name in DUMP_FILES:
         path = DUMP_DIR / name
         print(f"    {path}  ({path.stat().st_size} bytes)")

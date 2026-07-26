@@ -4,7 +4,7 @@ English | [中文](README.zh-CN.md)
 
 RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
 
-**v0.4.1** — early MVP. Optional multi-file RDB snapshot (`SAVE` / `persistence.dir`) plus optional protobuf AOF (`persistence.aof`, background batched flush, `aof_fsync` / `aof_io`). Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
+**v0.4.1** — early MVP. Optional single-file RDB snapshot (`SAVE` / `persistence.dir` → `dump.rdb`) plus optional protobuf AOF (`persistence.aof`, background batched flush, `aof_fsync` / `aof_io`). Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
@@ -40,14 +40,14 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `storage` | `kv_reserve` | `100000` | `KvStore` pre-reserve |
 | `index` | `default_capacity` | `1024` | Initial vector-set capacity |
 | `persistence` | `dir` | `data` | RDB snapshot directory; empty disables `SAVE` |
-| `persistence` | `load_on_startup` | `false` | Load `dump.*` from `dir` on startup |
+| `persistence` | `load_on_startup` | `false` | Load `dump.rdb` from `dir` on startup |
 | `persistence` | `aof` | `false` | Protobuf AOF at `dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always` (`fdatasync`) |
 | `persistence` | `aof_io` | `thread` | `auto` / `thread` / `iouring` (flush backend; prefer `thread` — `iouring` is experimental only) |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
 
-Snapshot files (multi-file) under `data/` by default: `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`. `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (encode on the request path, flush thread writes `appendonly.aof`; `aof_fsync` controls durability).
+Snapshot file under `data/dump.rdb` by default (Header + TOC + KV/NODES/USEARCH). `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (encode on the request path, flush thread writes `appendonly.aof`; `aof_fsync` controls durability).
 
 Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 
@@ -55,7 +55,7 @@ Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 ./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
 ./bench/smoke/pipeline.sh  # c=1 pipeline smoke (Vemory only)
 ./bench/smoke/vector.sh    # VSET load + VGET + VDEL spot-check (redis-py)
-./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.usearch → VGET (needs persistence.dir)
+./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.rdb → VGET (needs persistence.dir)
 python3 bench/pipeline_bench.py                  # c=1 SET/GET: Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95 (see bench/README.md)
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE frequency vs SET QPS

@@ -129,24 +129,38 @@ USearchEmbedIndex::Status USearchEmbedIndex::usearchDel(uint16_t id) {
   return Status::kOk;
 }
 
-USearchEmbedIndex::Status USearchEmbedIndex::Save(const char* path) const {
-  if (path == nullptr || path[0] == '\0' || !impl_) {
+USearchEmbedIndex::Status USearchEmbedIndex::Save(FILE* fp) const {
+  if (fp == nullptr || !impl_) {
     return Status::kBadValue;
   }
-  auto result = impl_->index.save(path);
+  auto result = impl_->index.save_to_stream(
+      [fp](void const* buffer, std::size_t length) {
+        return std::fwrite(buffer, 1, length, fp) == length;
+      });
   return result ? Status::kOk : Status::kError;
 }
 
-USearchEmbedIndex::Status USearchEmbedIndex::Load(const char* path) {
-  if (path == nullptr || path[0] == '\0') {
+USearchEmbedIndex::Status USearchEmbedIndex::Load(FILE* fp) {
+  if (fp == nullptr || dimensions_ == 0) {
     return Status::kBadValue;
   }
-  auto made = index_dense_t::make(path, /*view=*/false);
-  if (!made) {
+  if (!impl_) {
+    metric_punned_t metric(dimensions_, metric_kind_t::cos_k,
+                           scalar_kind_t::f32_k);
+    auto made = index_dense_t::make(metric);
+    if (!made) {
+      return Status::kError;
+    }
+    impl_ = std::make_unique<Impl>();
+    impl_->index = std::move(made.index);
+  }
+  auto result = impl_->index.load_from_stream(
+      [fp](void* buffer, std::size_t length) {
+        return std::fread(buffer, 1, length, fp) == length;
+      });
+  if (!result) {
     return Status::kError;
   }
-  impl_ = std::make_unique<Impl>();
-  impl_->index = std::move(made.index);
   dimensions_ = impl_->index.dimensions();
   capacity_ = impl_->index.capacity() == 0 ? 1 : impl_->index.capacity();
   return Status::kOk;

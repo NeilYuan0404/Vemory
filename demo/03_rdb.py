@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Demo 3 — RDB snapshot (KV + vectors).
 
-Two steps (SAVE is fork-background; restart loads dump.* when load_on_startup=true):
+Two steps (SAVE is fork-background; restart loads dump.rdb when load_on_startup=true):
 
   # terminal A — start with demo config (dir=demo/data, load_on_startup=true)
   ./bin/vemory -c demo/vemory.demo.ini
@@ -37,7 +37,7 @@ from common import (  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DUMP_DIR = ROOT / "demo" / "data"
-DUMP_FILES = ("dump.meta", "dump.kv", "dump.nodes", "dump.usearch")
+DUMP_FILES = ("dump.rdb",)
 
 KV_KEY = "demo:rdb:hello"
 KV_VAL = b"world"
@@ -50,12 +50,14 @@ THRESHOLD = 0.15
 
 def wait_for_dumps(timeout_s: float = 5.0) -> None:
     deadline = time.time() + timeout_s
+    rdb = DUMP_DIR / "dump.rdb"
     while time.time() < deadline:
-        if all((DUMP_DIR / name).is_file() for name in DUMP_FILES):
+        if rdb.is_file() and rdb.stat().st_size > 0:
             return
         time.sleep(0.05)
-    missing = [n for n in DUMP_FILES if not (DUMP_DIR / n).is_file()]
-    die(f"dump files not ready under {DUMP_DIR}: missing {missing}")
+    if not rdb.is_file():
+        die(f"dump files not ready under {DUMP_DIR}: missing dump.rdb")
+    die(f"dump files not ready under {DUMP_DIR}: dump.rdb empty")
 
 
 def cmd_dump() -> int:
@@ -73,10 +75,10 @@ def cmd_dump() -> int:
 
     print("\n3) SAVE (background fork)")
     save(r)
-    print("  SAVE → OK (waiting for dump.* ...)")
+    print("  SAVE → OK (waiting for dump.rdb ...)")
     wait_for_dumps()
 
-    print("\n4) snapshot files:")
+    print("\n4) snapshot file:")
     for name in DUMP_FILES:
         path = DUMP_DIR / name
         print(f"  {path.relative_to(ROOT)}  ({path.stat().st_size} bytes)")

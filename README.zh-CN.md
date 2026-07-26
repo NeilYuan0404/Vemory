@@ -4,7 +4,7 @@
 
 兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串可用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
 
-**v0.4.1 — 早期 MVP。** 可选多文件 RDB 快照（`SAVE` / `persistence.dir`），以及可选 Protobuf AOF（`persistence.aof`，后台批量刷盘，`aof_fsync` / `aof_io`）。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v0.4.1 — 早期 MVP。** 可选单文件 RDB 快照（`SAVE` / `persistence.dir` → `dump.rdb`），以及可选 Protobuf AOF（`persistence.aof`，后台批量刷盘，`aof_fsync` / `aof_io`）。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 
@@ -40,14 +40,14 @@ redis-cli -p 8989
 | `storage` | `kv_reserve` | `100000` | `KvStore` 预留容量 |
 | `index` | `default_capacity` | `1024` | 向量集合初始容量 |
 | `persistence` | `dir` | `data` | RDB 快照目录；空则 `SAVE` 不可用 |
-| `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.*` |
+| `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.rdb` |
 | `persistence` | `aof` | `false` | Protobuf AOF：`dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always`（`fdatasync`） |
 | `persistence` | `aof_io` | `thread` | `auto` / `thread` / `iouring`（刷盘后端；生产请用 `thread`——`iouring` 仅为试验） |
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
 
-快照文件（多文件）默认在 `data/`：`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`。`SAVE` 为 fork 后台写盘。可选 AOF：开启 `persistence.aof`（请求路径编码，刷盘线程写 `appendonly.aof`；`aof_fsync` 控制耐久性）。
+快照文件默认在 `data/dump.rdb`（Header + TOC + KV/NODES/USEARCH）。`SAVE` 为 fork 后台写盘。可选 AOF：开启 `persistence.aof`（请求路径编码，刷盘线程写 `appendonly.aof`；`aof_fsync` 控制耐久性）。
 
 压测（服务端需已启动；依赖 `redis-benchmark` / `redis-cli`）：
 
@@ -55,7 +55,7 @@ redis-cli -p 8989
 ./bench/smoke/kvs.sh       # PING / ECHO / SET / GET
 ./bench/smoke/pipeline.sh  # c=1 管道冒烟（仅 Vemory）
 ./bench/smoke/vector.sh    # VSET 灌库 + VGET + VDEL 抽检（redis-py）
-./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.usearch → VGET（需 persistence.dir）
+./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.rdb → VGET（需 persistence.dir）
 python3 bench/pipeline_bench.py                  # c=1 SET/GET：Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95（见 bench/README.md）
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE 频率 vs SET QPS

@@ -33,7 +33,7 @@ Usearch-backed ANN. Cosine metric, `f32`.
 | API | Notes |
 |-----|-------|
 | `Add` / `Search` / `Del` | Keyed by `uint16_t` |
-| `Save` / `Load` | usearch file path; used by RDB `dump.usearch` |
+| `Save` / `Load` | usearch stream on `FILE*`; used by the USEARCH section of `dump.rdb` |
 | `dimensions` | Fixed at construction / load |
 
 `Search` hit `score` is **cosine distance** (lower is closer). `VNodeIndex` compares distance to `VGET` threshold.

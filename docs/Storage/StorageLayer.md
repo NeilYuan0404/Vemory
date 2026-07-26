@@ -30,7 +30,7 @@ In-memory string map for Redis-style `SET` / `GET` / `DEL`.
 | API | Notes |
 |-----|-------|
 | `Set` / `Get` / `Del` | Average O(1); empty key rejected on Set |
-| `Dump` / `Load` | Binary snapshot segment for `dump.kv` |
+| `Dump` / `Load` | Binary snapshot segment for the KV section of `dump.rdb` |
 
 ---
 

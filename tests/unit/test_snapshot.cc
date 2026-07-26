@@ -101,12 +101,15 @@ TEST(SnapshotManager, SaveLoadRoundTrip) {
   ASSERT_EQ(idx.Set(b, "uk2", "q2", "ans-b"), VNodeIndex::Status::kOk);
 
   SnapshotManager snap(&idx, &kv, dir.path());
-  ASSERT_EQ(snap.SaveToDir(), SnapshotManager::Status::kOk);
+  ASSERT_EQ(snap.BackgroundSave(), SnapshotManager::Status::kOk);
+  for (int i = 0; i < 100 && snap.save_in_progress(); ++i) {
+    snap.ReapSaveChild();
+    ::usleep(20000);
+  }
+  ASSERT_FALSE(snap.save_in_progress());
 
-  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/dump.meta"));
-  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/dump.kv"));
-  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/dump.nodes"));
-  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/dump.usearch"));
+  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/dump.rdb"));
+  EXPECT_GT(std::filesystem::file_size(dir.path() + "/dump.rdb"), 0u);
 
   VNodeIndex idx2(64);
   KvStore kv2;
@@ -145,7 +148,34 @@ TEST(SnapshotManager, SaveCommandViaHandler) {
     ::usleep(20000);
   }
   EXPECT_FALSE(snap.save_in_progress());
-  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/dump.meta"));
+  EXPECT_TRUE(std::filesystem::exists(dir.path() + "/dump.rdb"));
+}
+
+TEST(SnapshotManager, SaveKvOnlyNoUsearch) {
+  TempDir dir;
+  VNodeIndex idx(16);
+  KvStore kv;
+  ASSERT_EQ(kv.Set("only", "kv"), KvStore::Status::kOk);
+
+  SnapshotManager snap(&idx, &kv, dir.path());
+  ASSERT_EQ(snap.BackgroundSave(), SnapshotManager::Status::kOk);
+  for (int i = 0; i < 100 && snap.save_in_progress(); ++i) {
+    snap.ReapSaveChild();
+    ::usleep(20000);
+  }
+  ASSERT_FALSE(snap.save_in_progress());
+  ASSERT_TRUE(std::filesystem::exists(dir.path() + "/dump.rdb"));
+
+  VNodeIndex idx2(16);
+  KvStore kv2;
+  SnapshotManager snap2(&idx2, &kv2, dir.path());
+  ASSERT_EQ(snap2.Load(), SnapshotManager::Status::kOk);
+
+  std::string val;
+  ASSERT_EQ(kv2.Get("only", &val), KvStore::Status::kOk);
+  EXPECT_EQ(val, "kv");
+  EXPECT_EQ(idx2.dimensions(), 0u);
+  EXPECT_EQ(idx2.node_count(), 0u);
 }
 
 TEST(SnapshotManager, SaveRequiresDir) {

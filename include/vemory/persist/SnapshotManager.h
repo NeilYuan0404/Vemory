@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <string_view>
 #include <sys/types.h>
@@ -9,7 +10,7 @@
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Timer.h"
 
-// Multi-file RDB snapshot: dump.meta / dump.kv / dump.nodes / dump.usearch.
+// Single-file RDB snapshot: dump.rdb (Header + TOC + KV/NODES/USEARCH).
 // SAVE forks a child to write; Load runs on the calling thread.
 class SnapshotManager {
  public:
@@ -28,13 +29,10 @@ class SnapshotManager {
   bool configured() const { return !dir_.empty(); }
   bool save_in_progress() const { return child_pid_ > 0; }
 
-  // Synchronous dump (used by child after fork, and by unit tests).
-  Status SaveToDir() const;
-
-  // Fork child to SaveToDir; parent returns immediately.
+  // Fork child to write dump.rdb; parent returns immediately.
   Status BackgroundSave();
 
-  // Load dump.* from dir into stores (replaces in-memory state).
+  // Load dump.rdb from dir into stores (replaces in-memory state).
   Status Load();
 
   // Non-blocking waitpid; clears child_pid_ when done.
@@ -43,22 +41,41 @@ class SnapshotManager {
   ~SnapshotManager();
 
  private:
-  struct Meta {
-    uint32_t version = 1;
-    uint64_t dim = 0;
-    uint32_t next_id = 1;
-    uint64_t kv_count = 0;
-    uint64_t node_count = 0;
+  static constexpr uint32_t kFlagHasUsearch = 1u;
+
+  struct TocEntry {
+    uint64_t offset = 0;
+    uint64_t length = 0;
   };
 
-  static constexpr const char* kMagic = "VEMORYSN";
-  static constexpr uint32_t kVersion = 1;
+  struct Header {
+    uint32_t version = 2;
+    uint32_t flags = 0;
+    uint64_t dim = 0;
+    uint32_t next_id = 1;
+    uint32_t pad = 0;
+    uint64_t kv_count = 0;
+    uint64_t node_count = 0;
+    TocEntry toc[3] = {};  // 0=KV, 1=NODES, 2=USEARCH
+  };
+
+  static constexpr const char* kMagic = "VEMORYDB";
+  static constexpr uint32_t kVersion = 2;
+  static constexpr const char* kRdbName = "dump.rdb";
+  static constexpr const char* kRdbTmpName = "dump.rdb.tmp";
+  // magic(8) + version(4) + flags(4) + dim(8) + next_id(4) + pad(4) +
+  // kv_count(8) + node_count(8) + toc[3]*(8+8) = 8+4+4+8+4+4+8+8+48 = 96
+  static constexpr long kHeaderBytes = 96;
+
+  // Synchronous dump used by the forked child in BackgroundSave.
+  Status SaveToDir() const;
 
   std::string Path(std::string_view name) const;
-  Status WriteMeta(const std::string& path, const Meta& meta) const;
-  Status ReadMeta(const std::string& path, Meta* meta) const;
+  Status WriteHeader(FILE* fp, const Header& header) const;
+  Status ReadHeader(FILE* fp, Header* header) const;
   Status FsyncFile(FILE* fp) const;
   Status AtomicRename(const std::string& tmp, const std::string& final_path) const;
+  void RemoveLegacyDumpFiles() const;
   void EnsureReapTimer();
 
   VNodeIndex* vnode_index_;

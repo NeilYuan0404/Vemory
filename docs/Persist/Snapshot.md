@@ -1,6 +1,6 @@
 # Persist Layer
 
-Owns multi-file RDB snapshots (`SnapshotManager`). Depends on the storage layer for dump/load of in-memory state; does not own hot-path Put/Get.
+Owns single-file RDB snapshots (`SnapshotManager`). Depends on the storage layer for dump/load of in-memory state; does not own hot-path Put/Get.
 
 Live command path: `SAVE` → `PersistDispatcher` → `SnapshotManager::BackgroundSave` (fork).
 
@@ -32,18 +32,33 @@ Built-in default and `conf/vemory.ini` both use `data/` (created on first `SAVE`
 
 ## File layout
 
-Under `dir`:
+Under `dir`, a single file `dump.rdb`:
 
-| File | Content |
-|------|---------|
-| `dump.meta` | magic `VEMORYSN`, version, dim, next_id, kv_count, node_count (**commit point**: renamed last) |
-| `dump.kv` | KvStore binary (`KvStore::Dump` / `Load`) |
-| `dump.nodes` | length-prefixed `VNodePb` via `ProtobufVNodeCodec` (no vectors) |
-| `dump.usearch` | usearch native file (`USearchEmbedIndex::Save` / `Load`); omitted when `dim == 0` |
+```text
+dump.rdb
+  Header (96 bytes)
+    magic[8] = "VEMORYDB"
+    version   u32 = 2
+    flags     u32   // bit0: has_usearch
+    dim       u64
+    next_id   u32
+    pad       u32
+    kv_count  u64
+    node_count u64
+    toc[3]: { offset u64, length u64 }  // 0=KV, 1=NODES, 2=USEARCH
+  Payload
+    [KV bytes][NODES bytes][USEARCH bytes?]
+```
 
-Write path: `*.tmp` → `fflush`/`fsync` → `rename`. Payload files first, **`dump.meta` last**. Load requires a readable `dump.meta`, then the other files.
+| Segment | Content |
+|---------|---------|
+| KV | KvStore binary (`KvStore::Dump` / `Load`) |
+| NODES | length-prefixed `VNodePb` via `ProtobufVNodeCodec` (no vectors) |
+| USEARCH | usearch native bytes (`USearchEmbedIndex::Save` / `Load` on `FILE*`); omitted when `dim == 0` (`toc[2].length = 0`) |
 
-Format is Vemory-specific (not Redis RDB-compatible). Optional protobuf AOF: [`Aof.md`](Aof.md) (`persistence.aof`).
+Write path: write `dump.rdb.tmp` (header reserved, then payloads, then rewrite header/TOC) → `fflush`/`fsync` → `rename` to `dump.rdb`. Successful SAVE also removes legacy multi-file names (`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch` and `.tmp`).
+
+Format is Vemory-specific (not Redis RDB-compatible). Old multi-file snapshots are not loaded. Optional protobuf AOF: [`Aof.md`](Aof.md) (`persistence.aof`).
 
 Wire: `redis-cli SAVE` (default dir `data/`; empty `persistence.dir` disables).
 
@@ -84,19 +99,6 @@ Destructor cancels the poll timer and, if a save child is still running, **block
 | `configured()` | `!dir().empty()` |
 | `save_in_progress()` | `true` while background child pid is tracked |
 
-### `SaveToDir()` — synchronous dump
-
-Writes a full snapshot on the **calling thread** (blocks until done).
-
-Typical callers:
-
-- Child process after `fork` inside `BackgroundSave`
-- Unit tests / tools that need a deterministic dump without fork
-
-Returns `kNotConfigured` if `dir` empty or store pointers null; `kIoError` / `kError` on failure; `kOk` on success.
-
-Creates `dir` if missing (`create_directories`).
-
 ### `BackgroundSave()` — fork (wire `SAVE`)
 
 ```text
@@ -105,8 +107,10 @@ BackgroundSave()
   → if child already running → kInProgress
   → fork()
        parent: record pid, schedule Timer poll, return kOk  (+OK to client)
-       child:  SaveToDir(); _exit(0|1)
+       child:  private SaveToDir(); _exit(0|1)
 ```
+
+`SaveToDir()` is private: synchronous dump runs only in the forked child (creates `dir` if missing). Returns `kNotConfigured` if `dir` empty or store pointers null; `kIoError` / `kError` on failure; `kOk` on success.
 
 Does **not** wait for the dump to finish. Concurrent second `SAVE` → `kInProgress` → RESP `-ERR Background save already in progress`.
 
@@ -131,10 +135,10 @@ Replaces in-memory KV + semantic cache from `dir` on the **calling thread**.
 
 Order:
 
-1. Read/validate `dump.meta`
-2. `KvStore::Clear` + `Load` from `dump.kv` (check `kv_count`)
-3. `VNodeIndex::Clear` + `LoadNodes` from `dump.nodes` (restore ids / `next_id`)
-4. If `dim > 0`, `LoadIndex` from `dump.usearch`
+1. Open `dump.rdb`, read/validate Header (magic `VEMORYDB`, version 2)
+2. Seek TOC[0]; `KvStore::Clear` + `Load` (check `kv_count`)
+3. Seek TOC[1]; `VNodeIndex::Clear` + `LoadNodes` (restore ids / `next_id`)
+4. If `dim > 0`, seek TOC[2]; `LoadIndex` from the usearch segment
 
 Used at startup when `load_on_startup` is true (see `src/Vemory.cc`):
 

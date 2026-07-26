@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <vector>
 
@@ -39,9 +40,9 @@ class USearchEmbedIndex {
 
   Status Del(uint16_t id);
 
-  // Persist / restore the underlying usearch index (vectors + graph).
-  Status Save(const char* path) const;
-  Status Load(const char* path);
+  // Persist / restore the underlying usearch index (vectors + graph) via stream.
+  Status Save(FILE* fp) const;
+  Status Load(FILE* fp);
 
   std::size_t dimensions() const { return dimensions_; }
 

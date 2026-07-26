@@ -216,23 +216,23 @@ VNodeIndex::Status VNodeIndex::LoadNodes(FILE* fp, uint64_t node_count,
   return Status::kOk;
 }
 
-VNodeIndex::Status VNodeIndex::SaveIndex(const char* path) const {
-  if (path == nullptr) {
+VNodeIndex::Status VNodeIndex::SaveIndex(FILE* fp) const {
+  if (fp == nullptr) {
     return Status::kBadValue;
   }
   if (index_ == nullptr || dim_ == 0) {
     return Status::kOk;
   }
-  return index_->Save(path) == USearchEmbedIndex::Status::kOk ? Status::kOk
-                                                             : Status::kIoError;
+  return index_->Save(fp) == USearchEmbedIndex::Status::kOk ? Status::kOk
+                                                           : Status::kIoError;
 }
 
-VNodeIndex::Status VNodeIndex::LoadIndex(const char* path, std::size_t dim) {
-  if (path == nullptr || dim == 0) {
+VNodeIndex::Status VNodeIndex::LoadIndex(FILE* fp, std::size_t dim) {
+  if (fp == nullptr || dim == 0) {
     return Status::kBadValue;
   }
   auto idx = std::make_unique<USearchEmbedIndex>(dim, default_capacity_);
-  if (idx->Load(path) != USearchEmbedIndex::Status::kOk) {
+  if (idx->Load(fp) != USearchEmbedIndex::Status::kOk) {
     return Status::kIoError;
   }
   if (idx->dimensions() != dim) {

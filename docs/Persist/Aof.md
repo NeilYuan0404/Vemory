@@ -1,6 +1,6 @@
 # Persist Layer — AOF (WAL)
 
-Append-only protobuf log of write mutations. Complements multi-file RDB snapshots ([`Snapshot.md`](Snapshot.md)).
+Append-only protobuf log of write mutations. Complements single-file RDB snapshots ([`Snapshot.md`](Snapshot.md)).
 
 Live path: successful `SET` / `DEL` / `VSET` / `VDEL` → `ApplyMutation` → `WalManager::Append` (encode + enqueue) → `AofWriter` background thread (batched `thread` fwrite or `io_uring` writev), then optional `fdatasync` per `aof_fsync`.
 

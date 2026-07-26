@@ -41,11 +41,11 @@ class VNodeIndex {
   std::size_t node_count() const { return storage_.size(); }
   uint16_t next_id() const { return storage_.next_id(); }
 
-  // Snapshot helpers (nodes file + usearch file).
+  // Snapshot helpers (nodes segment + usearch segment).
   Status DumpNodes(FILE* fp) const;
   Status LoadNodes(FILE* fp, uint64_t node_count, uint16_t next_id);
-  Status SaveIndex(const char* path) const;
-  Status LoadIndex(const char* path, std::size_t dim);
+  Status SaveIndex(FILE* fp) const;
+  Status LoadIndex(FILE* fp, std::size_t dim);
   void Clear();
 
  private:

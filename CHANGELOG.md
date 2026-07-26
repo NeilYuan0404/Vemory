@@ -4,6 +4,14 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- RDB snapshot is a single file `dump.rdb` (Header + TOC + KV/NODES/USEARCH); magic `VEMORYDB`, version 2
+- `USearchEmbedIndex` / `VNodeIndex` index persist via `FILE*` streams (`save_to_stream` / `load_from_stream`)
+- Successful `SAVE` removes legacy multi-file names (`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`)
+
+### Breaking
+- Old multi-file RDB layouts are no longer loaded; re-`SAVE` after upgrade
+
 ## [0.4.1] — 2026-07-25
 
 AOF durability controls, pluggable flush backends, and batched writes.

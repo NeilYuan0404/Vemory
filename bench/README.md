@@ -80,7 +80,7 @@ Reports wall time and QPS for load + query, then checks `VDEL`. Single-threaded 
 
 ## Smoke — Vector RDB SAVE (`smoke/vector_rdb.sh`)
 
-`VSET` a small card → `VGET` → `SAVE` → wait for `dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch` under `DUMP_DIR` → `VGET` again. Confirms vector snapshot files are written (especially non-empty `dump.usearch`).
+`VSET` a small card → `VGET` → `SAVE` → wait for non-empty `dump.rdb` under `DUMP_DIR` → `VGET` again. Confirms the vector snapshot file is written.
 
 Server must already be running with `persistence.dir` matching `DUMP_DIR` (default: repo `data/`). Does **not** restart / `load_on_startup`; that path is [`demo/03_rdb.py`](../demo/03_rdb.py).
 

@@ -6,8 +6,6 @@
 #include <filesystem>
 #include <system_error>
 
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -69,54 +67,68 @@ SnapshotManager::Status SnapshotManager::AtomicRename(
   return Status::kOk;
 }
 
-SnapshotManager::Status SnapshotManager::WriteMeta(const std::string& path,
-                                                   const Meta& meta) const {
-  FILE* fp = std::fopen(path.c_str(), "wb");
+void SnapshotManager::RemoveLegacyDumpFiles() const {
+  static constexpr const char* kLegacy[] = {
+      "dump.meta",         "dump.kv",         "dump.nodes",
+      "dump.usearch",      "dump.meta.tmp",   "dump.kv.tmp",
+      "dump.nodes.tmp",    "dump.usearch.tmp",
+  };
+  for (const char* name : kLegacy) {
+    std::error_code ec;
+    std::filesystem::remove(Path(name), ec);
+  }
+}
+
+SnapshotManager::Status SnapshotManager::WriteHeader(FILE* fp,
+                                                    const Header& header) const {
   if (fp == nullptr) {
+    return Status::kBadValue;
+  }
+  if (std::fseek(fp, 0, SEEK_SET) != 0) {
     return Status::kIoError;
   }
   char magic[8] = {};
   std::memcpy(magic, kMagic, 8);
-  const bool ok = WriteExact(fp, magic, sizeof(magic)) &&
-                  WriteExact(fp, &meta.version, sizeof(meta.version)) &&
-                  WriteExact(fp, &meta.dim, sizeof(meta.dim)) &&
-                  WriteExact(fp, &meta.next_id, sizeof(meta.next_id)) &&
-                  WriteExact(fp, &meta.kv_count, sizeof(meta.kv_count)) &&
-                  WriteExact(fp, &meta.node_count, sizeof(meta.node_count));
-  if (!ok) {
-    std::fclose(fp);
-    return Status::kIoError;
-  }
-  const auto st = FsyncFile(fp);
-  std::fclose(fp);
-  return st;
+  const bool ok =
+      WriteExact(fp, magic, sizeof(magic)) &&
+      WriteExact(fp, &header.version, sizeof(header.version)) &&
+      WriteExact(fp, &header.flags, sizeof(header.flags)) &&
+      WriteExact(fp, &header.dim, sizeof(header.dim)) &&
+      WriteExact(fp, &header.next_id, sizeof(header.next_id)) &&
+      WriteExact(fp, &header.pad, sizeof(header.pad)) &&
+      WriteExact(fp, &header.kv_count, sizeof(header.kv_count)) &&
+      WriteExact(fp, &header.node_count, sizeof(header.node_count)) &&
+      WriteExact(fp, &header.toc[0], sizeof(header.toc));
+  return ok ? Status::kOk : Status::kIoError;
 }
 
-SnapshotManager::Status SnapshotManager::ReadMeta(const std::string& path,
-                                                  Meta* meta) const {
-  if (meta == nullptr) {
+SnapshotManager::Status SnapshotManager::ReadHeader(FILE* fp,
+                                                   Header* header) const {
+  if (fp == nullptr || header == nullptr) {
     return Status::kBadValue;
   }
-  FILE* fp = std::fopen(path.c_str(), "rb");
-  if (fp == nullptr) {
+  if (std::fseek(fp, 0, SEEK_SET) != 0) {
     return Status::kIoError;
   }
   char magic[8] = {};
-  Meta m;
-  const bool ok = ReadExact(fp, magic, sizeof(magic)) &&
-                  ReadExact(fp, &m.version, sizeof(m.version)) &&
-                  ReadExact(fp, &m.dim, sizeof(m.dim)) &&
-                  ReadExact(fp, &m.next_id, sizeof(m.next_id)) &&
-                  ReadExact(fp, &m.kv_count, sizeof(m.kv_count)) &&
-                  ReadExact(fp, &m.node_count, sizeof(m.node_count));
-  std::fclose(fp);
+  Header h;
+  const bool ok =
+      ReadExact(fp, magic, sizeof(magic)) &&
+      ReadExact(fp, &h.version, sizeof(h.version)) &&
+      ReadExact(fp, &h.flags, sizeof(h.flags)) &&
+      ReadExact(fp, &h.dim, sizeof(h.dim)) &&
+      ReadExact(fp, &h.next_id, sizeof(h.next_id)) &&
+      ReadExact(fp, &h.pad, sizeof(h.pad)) &&
+      ReadExact(fp, &h.kv_count, sizeof(h.kv_count)) &&
+      ReadExact(fp, &h.node_count, sizeof(h.node_count)) &&
+      ReadExact(fp, &h.toc[0], sizeof(h.toc));
   if (!ok) {
     return Status::kIoError;
   }
-  if (std::memcmp(magic, kMagic, 8) != 0 || m.version != kVersion) {
+  if (std::memcmp(magic, kMagic, 8) != 0 || h.version != kVersion) {
     return Status::kError;
   }
-  *meta = m;
+  *header = h;
   return Status::kOk;
 }
 
@@ -131,94 +143,104 @@ SnapshotManager::Status SnapshotManager::SaveToDir() const {
     return Status::kIoError;
   }
 
-  const std::string kv_tmp = Path("dump.kv.tmp");
-  const std::string nodes_tmp = Path("dump.nodes.tmp");
-  const std::string usearch_tmp = Path("dump.usearch.tmp");
-  const std::string meta_tmp = Path("dump.meta.tmp");
+  const std::string tmp_path = Path(kRdbTmpName);
+  const std::string final_path = Path(kRdbName);
 
-  const std::string kv_final = Path("dump.kv");
-  const std::string nodes_final = Path("dump.nodes");
-  const std::string usearch_final = Path("dump.usearch");
-  const std::string meta_final = Path("dump.meta");
+  FILE* fp = std::fopen(tmp_path.c_str(), "wb+");
+  if (fp == nullptr) {
+    return Status::kIoError;
+  }
 
-  Meta meta;
-  meta.version = kVersion;
-  meta.dim = vnode_index_->dimensions();
-  meta.next_id = vnode_index_->next_id();
-  meta.kv_count = kv_->size();
-  meta.node_count = vnode_index_->node_count();
+  Header header;
+  header.version = kVersion;
+  header.dim = vnode_index_->dimensions();
+  header.next_id = vnode_index_->next_id();
+  header.kv_count = kv_->size();
+  header.node_count = vnode_index_->node_count();
 
-  // dump.kv.tmp
+  // Reserve header; payloads start immediately after.
+  if (std::fseek(fp, kHeaderBytes, SEEK_SET) != 0) {
+    std::fclose(fp);
+    return Status::kIoError;
+  }
+
+  // KV segment
   {
-    FILE* fp = std::fopen(kv_tmp.c_str(), "wb");
-    if (fp == nullptr) {
+    const long start = std::ftell(fp);
+    if (start < 0) {
+      std::fclose(fp);
       return Status::kIoError;
     }
     if (kv_->Dump(fp) != KvStore::Status::kOk) {
       std::fclose(fp);
       return Status::kIoError;
     }
-    const auto st = FsyncFile(fp);
-    std::fclose(fp);
-    if (st != Status::kOk) {
-      return st;
+    const long end = std::ftell(fp);
+    if (end < 0 || end < start) {
+      std::fclose(fp);
+      return Status::kIoError;
     }
+    header.toc[0].offset = static_cast<uint64_t>(start);
+    header.toc[0].length = static_cast<uint64_t>(end - start);
   }
 
-  // dump.nodes.tmp
+  // NODES segment
   {
-    FILE* fp = std::fopen(nodes_tmp.c_str(), "wb");
-    if (fp == nullptr) {
+    const long start = std::ftell(fp);
+    if (start < 0) {
+      std::fclose(fp);
       return Status::kIoError;
     }
     if (vnode_index_->DumpNodes(fp) != VNodeIndex::Status::kOk) {
       std::fclose(fp);
       return Status::kIoError;
     }
-    const auto st = FsyncFile(fp);
+    const long end = std::ftell(fp);
+    if (end < 0 || end < start) {
+      std::fclose(fp);
+      return Status::kIoError;
+    }
+    header.toc[1].offset = static_cast<uint64_t>(start);
+    header.toc[1].length = static_cast<uint64_t>(end - start);
+  }
+
+  // USEARCH segment (optional when dim==0)
+  if (header.dim > 0) {
+    const long start = std::ftell(fp);
+    if (start < 0) {
+      std::fclose(fp);
+      return Status::kIoError;
+    }
+    if (vnode_index_->SaveIndex(fp) != VNodeIndex::Status::kOk) {
+      std::fclose(fp);
+      return Status::kIoError;
+    }
+    const long end = std::ftell(fp);
+    if (end < 0 || end < start) {
+      std::fclose(fp);
+      return Status::kIoError;
+    }
+    header.toc[2].offset = static_cast<uint64_t>(start);
+    header.toc[2].length = static_cast<uint64_t>(end - start);
+    if (header.toc[2].length > 0) {
+      header.flags |= kFlagHasUsearch;
+    }
+  }
+
+  if (WriteHeader(fp, header) != Status::kOk) {
     std::fclose(fp);
-    if (st != Status::kOk) {
-      return st;
-    }
-  }
-
-  // dump.usearch.tmp (optional when dim==0)
-  if (meta.dim > 0) {
-    if (vnode_index_->SaveIndex(usearch_tmp.c_str()) != VNodeIndex::Status::kOk) {
-      return Status::kIoError;
-    }
-    // fsync via open/fsync/close
-    const int fd = ::open(usearch_tmp.c_str(), O_RDONLY);
-    if (fd < 0 || ::fsync(fd) != 0) {
-      if (fd >= 0) {
-        ::close(fd);
-      }
-      return Status::kIoError;
-    }
-    ::close(fd);
-  }
-
-  // dump.meta.tmp last among temps
-  if (WriteMeta(meta_tmp, meta) != Status::kOk) {
     return Status::kIoError;
   }
+  const auto st = FsyncFile(fp);
+  std::fclose(fp);
+  if (st != Status::kOk) {
+    return st;
+  }
 
-  // Rename payload files first; meta last = commit point.
-  if (AtomicRename(kv_tmp, kv_final) != Status::kOk ||
-      AtomicRename(nodes_tmp, nodes_final) != Status::kOk) {
+  if (AtomicRename(tmp_path, final_path) != Status::kOk) {
     return Status::kIoError;
   }
-  if (meta.dim > 0) {
-    if (AtomicRename(usearch_tmp, usearch_final) != Status::kOk) {
-      return Status::kIoError;
-    }
-  } else {
-    std::error_code rm_ec;
-    std::filesystem::remove(usearch_final, rm_ec);
-  }
-  if (AtomicRename(meta_tmp, meta_final) != Status::kOk) {
-    return Status::kIoError;
-  }
+  RemoveLegacyDumpFiles();
   return Status::kOk;
 }
 
@@ -227,58 +249,69 @@ SnapshotManager::Status SnapshotManager::Load() {
     return Status::kNotConfigured;
   }
 
-  const std::string meta_path = Path("dump.meta");
-  Meta meta;
-  const auto mst = ReadMeta(meta_path, &meta);
-  if (mst != Status::kOk) {
-    return mst;
+  FILE* fp = std::fopen(Path(kRdbName).c_str(), "rb");
+  if (fp == nullptr) {
+    return Status::kIoError;
+  }
+
+  Header header;
+  const auto hst = ReadHeader(fp, &header);
+  if (hst != Status::kOk) {
+    std::fclose(fp);
+    return hst;
   }
 
   // Load KV
-  {
-    FILE* fp = std::fopen(Path("dump.kv").c_str(), "rb");
-    if (fp == nullptr) {
-      return Status::kIoError;
-    }
-    kv_->Clear();
-    const auto st = kv_->Load(fp);
+  if (std::fseek(fp, static_cast<long>(header.toc[0].offset), SEEK_SET) != 0) {
     std::fclose(fp);
-    if (st != KvStore::Status::kOk) {
-      return Status::kIoError;
-    }
-    if (kv_->size() != static_cast<std::size_t>(meta.kv_count)) {
-      return Status::kError;
-    }
+    return Status::kIoError;
+  }
+  kv_->Clear();
+  if (kv_->Load(fp) != KvStore::Status::kOk) {
+    std::fclose(fp);
+    return Status::kIoError;
+  }
+  if (kv_->size() != static_cast<std::size_t>(header.kv_count)) {
+    std::fclose(fp);
+    return Status::kError;
   }
 
   // Load nodes (clears vnode storage)
-  vnode_index_->Clear();
-  {
-    FILE* fp = std::fopen(Path("dump.nodes").c_str(), "rb");
-    if (fp == nullptr) {
-      return Status::kIoError;
-    }
-    const auto st =
-        vnode_index_->LoadNodes(fp, meta.node_count,
-                                static_cast<uint16_t>(meta.next_id));
+  if (std::fseek(fp, static_cast<long>(header.toc[1].offset), SEEK_SET) != 0) {
     std::fclose(fp);
-    if (st != VNodeIndex::Status::kOk) {
-      return Status::kIoError;
-    }
-    if (vnode_index_->node_count() !=
-        static_cast<std::size_t>(meta.node_count)) {
+    return Status::kIoError;
+  }
+  vnode_index_->Clear();
+  if (vnode_index_->LoadNodes(fp, header.node_count,
+                              static_cast<uint16_t>(header.next_id)) !=
+      VNodeIndex::Status::kOk) {
+    std::fclose(fp);
+    return Status::kIoError;
+  }
+  if (vnode_index_->node_count() !=
+      static_cast<std::size_t>(header.node_count)) {
+    std::fclose(fp);
+    return Status::kError;
+  }
+
+  if (header.dim > 0) {
+    if (header.toc[2].length == 0) {
+      std::fclose(fp);
       return Status::kError;
     }
-  }
-
-  if (meta.dim > 0) {
-    if (vnode_index_->LoadIndex(Path("dump.usearch").c_str(),
-                                static_cast<std::size_t>(meta.dim)) !=
+    if (std::fseek(fp, static_cast<long>(header.toc[2].offset), SEEK_SET) !=
+        0) {
+      std::fclose(fp);
+      return Status::kIoError;
+    }
+    if (vnode_index_->LoadIndex(fp, static_cast<std::size_t>(header.dim)) !=
         VNodeIndex::Status::kOk) {
+      std::fclose(fp);
       return Status::kIoError;
     }
   }
 
+  std::fclose(fp);
   return Status::kOk;
 }
 

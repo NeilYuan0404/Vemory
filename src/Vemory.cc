@@ -16,6 +16,8 @@
 #include "vemory/storage/KvStore.h"
 #include "vemory/persist/SnapshotManager.h"
 #include "vemory/persist/WalManager.h"
+#include "vemory/replication/ReplicationMaster.h"
+#include "vemory/replication/ReplicationSlave.h"
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Config.h"
 #include "vemory/util/Logging.h"
@@ -23,9 +25,11 @@
 namespace {
 
 void PrintUsage(const char* argv0) {
-  std::cerr << "Usage: " << argv0 << " [-c <config.ini>] [port]\n"
-            << "  -c path   load INI config (see conf/vemory.ini)\n"
-            << "  port      listen port (overrides server.port)\n";
+  std::cerr << "Usage: " << argv0
+            << " [-c <config.ini>] [--slaveof <host> <port>] [port]\n"
+            << "  -c path              load INI config (see conf/vemory.ini)\n"
+            << "  --slaveof host port  run as replica; PSYNC fullsync from master\n"
+            << "  port                 listen port (overrides server.port)\n";
 }
 
 bool ParsePortArg(const char* text, uint16_t* out) {
@@ -41,12 +45,16 @@ bool ParsePortArg(const char* text, uint16_t* out) {
   return true;
 }
 
-// Parse: vemory [-c path] [port]
+// Parse: vemory [-c path] [--slaveof host port] [port]
 bool ParseArgs(int argc, char** argv, std::string* config_path,
-               bool* port_override, uint16_t* port) {
+               bool* port_override, uint16_t* port, bool* slaveof,
+               std::string* slaveof_host, uint16_t* slaveof_port) {
   *config_path = "";
   *port_override = false;
   *port = 6379;
+  *slaveof = false;
+  *slaveof_host = "";
+  *slaveof_port = 0;
 
   int i = 1;
   while (i < argc) {
@@ -59,6 +67,22 @@ bool ParseArgs(int argc, char** argv, std::string* config_path,
       }
       *config_path = argv[i + 1];
       i += 2;
+      continue;
+    }
+    if (arg == "--slaveof") {
+      if (i + 2 >= argc) {
+        std::cerr << "Usage: --slaveof <host> <port>\n";
+        PrintUsage(argv[0]);
+        return false;
+      }
+      *slaveof = true;
+      *slaveof_host = argv[i + 1];
+      if (!ParsePortArg(argv[i + 2], slaveof_port)) {
+        std::cerr << "Invalid --slaveof port: " << argv[i + 2] << "\n";
+        PrintUsage(argv[0]);
+        return false;
+      }
+      i += 3;
       continue;
     }
     if (arg == "-h" || arg == "--help") {
@@ -92,7 +116,11 @@ int main(int argc, char** argv) {
   std::string config_path;
   bool port_override = false;
   uint16_t cli_port = 6379;
-  if (!ParseArgs(argc, argv, &config_path, &port_override, &cli_port)) {
+  bool slaveof = false;
+  std::string slaveof_host;
+  uint16_t slaveof_port = 0;
+  if (!ParseArgs(argc, argv, &config_path, &port_override, &cli_port, &slaveof,
+                 &slaveof_host, &slaveof_port)) {
     return EXIT_FAILURE;
   }
 
@@ -107,6 +135,9 @@ int main(int argc, char** argv) {
   if (port_override) {
     cfg.port = cli_port;
   }
+  cfg.slaveof = slaveof;
+  cfg.slaveof_host = slaveof_host;
+  cfg.slaveof_port = slaveof_port;
 
   vemory::InitLogging(cfg.log_level);
   for (const auto& w : cfg.warnings) {
@@ -149,34 +180,59 @@ int main(int argc, char** argv) {
     }
   }
 
-  CommandHandler commands(&vnode_index, &kv, &snapshot, &wal);
+  std::unique_ptr<ReplicationMaster> repl_master;
+  if (!cfg.slaveof) {
+    repl_master = std::make_unique<ReplicationMaster>(&snapshot);
+  }
+
+  CommandHandler commands(&vnode_index, &kv, &snapshot, &wal,
+                          repl_master.get());
   auto protocol = std::make_shared<RespProtocolHandler>();
 
-  server.Start(cfg.bind, cfg.port, [&commands, protocol](TcpConn::Ptr conn) {
-    spdlog::debug("accepted fd={}", conn->Fd());
+  server.Start(cfg.bind, cfg.port,
+               [&commands, protocol, master = repl_master.get()](
+                   TcpConn::Ptr conn) {
+                 spdlog::debug("accepted fd={}", conn->Fd());
+                 if (master != nullptr) {
+                   master->OnConnection(conn);
+                 }
 
-    auto executor = std::make_shared<ProtocolExecutor>(
-        protocol,
-        [&commands](RequestContext ctx, std::string* reply) {
-          commands.Dispatch(ctx, reply);
-        },
-        [conn](std::string_view data) {
-          if (!data.empty()) {
-            conn->Send(data.data(), data.size());
-          }
-        },
-        [conn]() {
-          const std::string err = "-ERR protocol error\r\n";
-          conn->Send(err.data(), err.size());
-        });
+                 auto executor = std::make_shared<ProtocolExecutor>(
+                     protocol,
+                     [&commands](RequestContext ctx, std::string* reply) {
+                       commands.Dispatch(ctx, reply);
+                     },
+                     [conn](std::string_view data) {
+                       if (!data.empty()) {
+                         conn->Send(data.data(), data.size());
+                       }
+                     },
+                     [conn]() {
+                       const std::string err = "-ERR protocol error\r\n";
+                       conn->Send(err.data(), err.size());
+                     });
 
-    conn->SetReadCallback([conn, executor]() {
-      executor->OnBufferReadable(conn->Fd(), conn->InputBuffer());
-    });
-  });
+                 conn->SetReadCallback([conn, executor]() {
+                   executor->OnBufferReadable(conn->Fd(), conn->InputBuffer());
+                 });
+               });
 
-  spdlog::info("Vemory listening on {}:{} (RESP; try: redis-cli -p {})",
-               cfg.bind, cfg.port, cfg.port);
+  std::unique_ptr<ReplicationSlave> repl_slave;
+  if (cfg.slaveof) {
+    repl_slave = std::make_unique<ReplicationSlave>(&evloop, &snapshot,
+                                                    &vnode_index, &kv);
+    if (!repl_slave->Start(cfg.slaveof_host, cfg.slaveof_port)) {
+      spdlog::error("Failed to start replication slave of {}:{}",
+                    cfg.slaveof_host, cfg.slaveof_port);
+      return EXIT_FAILURE;
+    }
+    spdlog::info("Vemory slaveof {}:{} listening on {}:{}", cfg.slaveof_host,
+                 cfg.slaveof_port, cfg.bind, cfg.port);
+  } else {
+    spdlog::info("Vemory master listening on {}:{} (RESP; try: redis-cli -p {})",
+                 cfg.bind, cfg.port, cfg.port);
+  }
+
   evloop.Run();
   return 0;
 }

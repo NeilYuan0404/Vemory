@@ -24,8 +24,9 @@ void KvsDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       entry.set_op(vemory::WalEntry::SET);
       entry.set_key(ctx.key);
       entry.set_value(ctx.element);
-      const auto ar = ApplyMutation(entry, MutateSource::kClient,
-                                    /*vnode_index=*/nullptr, store, args->wal);
+      const auto ar =
+          ApplyMutation(entry, MutateSource::kClient, /*vnode_index=*/nullptr,
+                        store, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);
         return;
@@ -51,8 +52,9 @@ void KvsDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       vemory::WalEntry entry;
       entry.set_op(vemory::WalEntry::DEL);
       entry.set_key(ctx.key);
-      const auto ar = ApplyMutation(entry, MutateSource::kClient,
-                                    /*vnode_index=*/nullptr, store, args->wal);
+      const auto ar =
+          ApplyMutation(entry, MutateSource::kClient, /*vnode_index=*/nullptr,
+                        store, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);
         return;

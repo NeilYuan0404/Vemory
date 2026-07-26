@@ -17,10 +17,11 @@ RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP cl
 
 ```bash
 make              # → bin/vemory
-./bin/vemory      # listen 0.0.0.0:6379
+./bin/vemory      # listen 0.0.0.0:6379 (master)
 ./bin/vemory 8989 # custom port
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI port overrides server.port
+./bin/vemory --slaveof 127.0.0.1 6379 6380  # replica: PSYNC fullsync from master
 ```
 
 ```bash
@@ -179,6 +180,7 @@ Design notes by layer:
 | Storage | [`docs/Storage/StorageLayer.md`](docs/Storage/StorageLayer.md) |
 | Persist / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
 | Persist / AOF | [`docs/Persist/Aof.md`](docs/Persist/Aof.md) |
+| Replication / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
 | Embed index / vector sets | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
 Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/`), schema in `proto/VNode.proto` (codec for future replication).

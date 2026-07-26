@@ -26,7 +26,7 @@ void VNodeDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       entry.set_answer(ctx.answer);
       entry.set_vector(ctx.vector_blob);
       const auto ar = ApplyMutation(entry, MutateSource::kClient, index,
-                                    /*kv=*/nullptr, args->wal);
+                                    /*kv=*/nullptr, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);
         return;
@@ -50,7 +50,7 @@ void VNodeDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       entry.set_op(vemory::WalEntry::VDEL);
       entry.set_user_key(ctx.user_key);
       const auto ar = ApplyMutation(entry, MutateSource::kClient, index,
-                                    /*kv=*/nullptr, args->wal);
+                                    /*kv=*/nullptr, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);
         return;

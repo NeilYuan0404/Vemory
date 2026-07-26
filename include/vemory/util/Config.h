@@ -37,6 +37,11 @@ struct Config {
   AofFsyncPolicy aof_fsync = AofFsyncPolicy::kEverySec;
   AofIoMode aof_io = AofIoMode::kThread;
 
+  // CLI --slaveof only (not INI). When set, process acts as replica.
+  bool slaveof = false;
+  std::string slaveof_host;
+  uint16_t slaveof_port = 0;
+
   // Soft issues from the last LoadConfig (unknown keys/sections).
   std::vector<std::string> warnings;
 };

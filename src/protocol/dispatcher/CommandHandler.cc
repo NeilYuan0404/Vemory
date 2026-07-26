@@ -3,18 +3,23 @@
 #include "vemory/protocol/dispatcher/AssistDispatcher.h"
 #include "vemory/protocol/dispatcher/KvsDispatcher.h"
 #include "vemory/protocol/dispatcher/PersistDispatcher.h"
+#include "vemory/protocol/dispatcher/ReplicationDispatcher.h"
 #include "vemory/protocol/dispatcher/VNodeDispatcher.h"
 
 CommandHandler::CommandHandler(VNodeIndex* vnode_index, KvStore* kv,
-                               SnapshotManager* snapshot, WalManager* wal)
+                               SnapshotManager* snapshot, WalManager* wal,
+                               ReplicationMaster* repl)
     : vnode_index_(vnode_index),
       kv_(kv),
       snapshot_(snapshot),
-      wal_(wal) {
+      wal_(wal),
+      repl_(repl) {
   kvs_arg_.kv = kv_;
   kvs_arg_.wal = wal_;
+  kvs_arg_.repl = repl_;
   vnode_arg_.index = vnode_index_;
   vnode_arg_.wal = wal_;
+  vnode_arg_.repl = repl_;
 
   register_.Register(CommandType::kPing, AssistDispatcher, nullptr);
   register_.Register(CommandType::kEcho, AssistDispatcher, nullptr);
@@ -30,6 +35,9 @@ CommandHandler::CommandHandler(VNodeIndex* vnode_index, KvStore* kv,
   }
   if (snapshot_ != nullptr) {
     register_.Register(CommandType::kSave, PersistDispatcher, snapshot_);
+  }
+  if (repl_ != nullptr) {
+    register_.Register(CommandType::kPsync, ReplicationDispatcher, repl_);
   }
 }
 

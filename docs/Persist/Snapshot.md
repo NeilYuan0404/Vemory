@@ -2,6 +2,8 @@
 
 Owns single-file RDB snapshots (`SnapshotManager`). Depends on the storage layer for dump/load of in-memory state; does not own hot-path Put/Get.
 
+Path API (`BackgroundSaveToPath` / `LoadFromPath`) is also used by replication fullsync under `tmp/` and does **not** require `persistence.dir`. See [`Replication.md`](Replication.md).
+
 Live command path: `SAVE` → `PersistDispatcher` → `SnapshotManager::BackgroundSave` (fork).
 
 Storage APIs used here: [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md). Protocol: [`../Protocol/Protocol.md`](../Protocol/Protocol.md).

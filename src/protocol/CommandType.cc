@@ -48,5 +48,8 @@ CommandType ParseCommandType(std::string_view name) {
   if (EqualsIgnoreCase(name, "SAVE")) {
     return CommandType::kSave;
   }
+  if (EqualsIgnoreCase(name, "PSYNC")) {
+    return CommandType::kPsync;
+  }
   return CommandType::kUnknown;
 }

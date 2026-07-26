@@ -68,6 +68,9 @@ SnapshotManager::Status SnapshotManager::AtomicRename(
 }
 
 void SnapshotManager::RemoveLegacyDumpFiles() const {
+  if (dir_.empty()) {
+    return;
+  }
   static constexpr const char* kLegacy[] = {
       "dump.meta",         "dump.kv",         "dump.nodes",
       "dump.usearch",      "dump.meta.tmp",   "dump.kv.tmp",
@@ -132,19 +135,22 @@ SnapshotManager::Status SnapshotManager::ReadHeader(FILE* fp,
   return Status::kOk;
 }
 
-SnapshotManager::Status SnapshotManager::SaveToDir() const {
-  if (dir_.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
-    return Status::kNotConfigured;
+SnapshotManager::Status SnapshotManager::SaveToPath(
+    const std::string& final_path) const {
+  if (final_path.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
+    return Status::kBadValue;
   }
 
+  std::filesystem::path final_p(final_path);
   std::error_code ec;
-  std::filesystem::create_directories(dir_, ec);
-  if (ec) {
-    return Status::kIoError;
+  if (final_p.has_parent_path()) {
+    std::filesystem::create_directories(final_p.parent_path(), ec);
+    if (ec) {
+      return Status::kIoError;
+    }
   }
 
-  const std::string tmp_path = Path(kRdbTmpName);
-  const std::string final_path = Path(kRdbName);
+  const std::string tmp_path = final_path + ".tmp";
 
   FILE* fp = std::fopen(tmp_path.c_str(), "wb+");
   if (fp == nullptr) {
@@ -158,13 +164,11 @@ SnapshotManager::Status SnapshotManager::SaveToDir() const {
   header.kv_count = kv_->size();
   header.node_count = vnode_index_->node_count();
 
-  // Reserve header; payloads start immediately after.
   if (std::fseek(fp, kHeaderBytes, SEEK_SET) != 0) {
     std::fclose(fp);
     return Status::kIoError;
   }
 
-  // KV segment
   {
     const long start = std::ftell(fp);
     if (start < 0) {
@@ -184,7 +188,6 @@ SnapshotManager::Status SnapshotManager::SaveToDir() const {
     header.toc[0].length = static_cast<uint64_t>(end - start);
   }
 
-  // NODES segment
   {
     const long start = std::ftell(fp);
     if (start < 0) {
@@ -204,7 +207,6 @@ SnapshotManager::Status SnapshotManager::SaveToDir() const {
     header.toc[1].length = static_cast<uint64_t>(end - start);
   }
 
-  // USEARCH segment (optional when dim==0)
   if (header.dim > 0) {
     const long start = std::ftell(fp);
     if (start < 0) {
@@ -240,7 +242,59 @@ SnapshotManager::Status SnapshotManager::SaveToDir() const {
   if (AtomicRename(tmp_path, final_path) != Status::kOk) {
     return Status::kIoError;
   }
-  RemoveLegacyDumpFiles();
+  return Status::kOk;
+}
+
+SnapshotManager::Status SnapshotManager::LoadFromFile(FILE* fp) {
+  if (fp == nullptr || vnode_index_ == nullptr || kv_ == nullptr) {
+    return Status::kBadValue;
+  }
+
+  Header header;
+  const auto hst = ReadHeader(fp, &header);
+  if (hst != Status::kOk) {
+    return hst;
+  }
+
+  if (std::fseek(fp, static_cast<long>(header.toc[0].offset), SEEK_SET) != 0) {
+    return Status::kIoError;
+  }
+  kv_->Clear();
+  if (kv_->Load(fp) != KvStore::Status::kOk) {
+    return Status::kIoError;
+  }
+  if (kv_->size() != static_cast<std::size_t>(header.kv_count)) {
+    return Status::kError;
+  }
+
+  if (std::fseek(fp, static_cast<long>(header.toc[1].offset), SEEK_SET) != 0) {
+    return Status::kIoError;
+  }
+  vnode_index_->Clear();
+  if (vnode_index_->LoadNodes(fp, header.node_count,
+                              static_cast<uint16_t>(header.next_id)) !=
+      VNodeIndex::Status::kOk) {
+    return Status::kIoError;
+  }
+  if (vnode_index_->node_count() !=
+      static_cast<std::size_t>(header.node_count)) {
+    return Status::kError;
+  }
+
+  if (header.dim > 0) {
+    if (header.toc[2].length == 0) {
+      return Status::kError;
+    }
+    if (std::fseek(fp, static_cast<long>(header.toc[2].offset), SEEK_SET) !=
+        0) {
+      return Status::kIoError;
+    }
+    if (vnode_index_->LoadIndex(fp, static_cast<std::size_t>(header.dim)) !=
+        VNodeIndex::Status::kOk) {
+      return Status::kIoError;
+    }
+  }
+
   return Status::kOk;
 }
 
@@ -248,71 +302,20 @@ SnapshotManager::Status SnapshotManager::Load() {
   if (dir_.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
     return Status::kNotConfigured;
   }
+  return LoadFromPath(Path(kRdbName));
+}
 
-  FILE* fp = std::fopen(Path(kRdbName).c_str(), "rb");
+SnapshotManager::Status SnapshotManager::LoadFromPath(const std::string& path) {
+  if (path.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
+    return Status::kBadValue;
+  }
+  FILE* fp = std::fopen(path.c_str(), "rb");
   if (fp == nullptr) {
     return Status::kIoError;
   }
-
-  Header header;
-  const auto hst = ReadHeader(fp, &header);
-  if (hst != Status::kOk) {
-    std::fclose(fp);
-    return hst;
-  }
-
-  // Load KV
-  if (std::fseek(fp, static_cast<long>(header.toc[0].offset), SEEK_SET) != 0) {
-    std::fclose(fp);
-    return Status::kIoError;
-  }
-  kv_->Clear();
-  if (kv_->Load(fp) != KvStore::Status::kOk) {
-    std::fclose(fp);
-    return Status::kIoError;
-  }
-  if (kv_->size() != static_cast<std::size_t>(header.kv_count)) {
-    std::fclose(fp);
-    return Status::kError;
-  }
-
-  // Load nodes (clears vnode storage)
-  if (std::fseek(fp, static_cast<long>(header.toc[1].offset), SEEK_SET) != 0) {
-    std::fclose(fp);
-    return Status::kIoError;
-  }
-  vnode_index_->Clear();
-  if (vnode_index_->LoadNodes(fp, header.node_count,
-                              static_cast<uint16_t>(header.next_id)) !=
-      VNodeIndex::Status::kOk) {
-    std::fclose(fp);
-    return Status::kIoError;
-  }
-  if (vnode_index_->node_count() !=
-      static_cast<std::size_t>(header.node_count)) {
-    std::fclose(fp);
-    return Status::kError;
-  }
-
-  if (header.dim > 0) {
-    if (header.toc[2].length == 0) {
-      std::fclose(fp);
-      return Status::kError;
-    }
-    if (std::fseek(fp, static_cast<long>(header.toc[2].offset), SEEK_SET) !=
-        0) {
-      std::fclose(fp);
-      return Status::kIoError;
-    }
-    if (vnode_index_->LoadIndex(fp, static_cast<std::size_t>(header.dim)) !=
-        VNodeIndex::Status::kOk) {
-      std::fclose(fp);
-      return Status::kIoError;
-    }
-  }
-
+  const auto st = LoadFromFile(fp);
   std::fclose(fp);
-  return Status::kOk;
+  return st;
 }
 
 void SnapshotManager::EnsureReapTimer() {
@@ -332,23 +335,34 @@ SnapshotManager::Status SnapshotManager::BackgroundSave() {
   if (dir_.empty()) {
     return Status::kNotConfigured;
   }
+  const auto st = BackgroundSaveToPath(Path(kRdbName));
+  return st;
+}
+
+SnapshotManager::Status SnapshotManager::BackgroundSaveToPath(std::string path) {
+  if (path.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
+    return Status::kBadValue;
+  }
   if (child_pid_ > 0) {
     return Status::kInProgress;
   }
 
+  pending_save_path_ = std::move(path);
+  const std::string child_path = pending_save_path_;
   const pid_t pid = ::fork();
   if (pid < 0) {
+    pending_save_path_.clear();
     return Status::kError;
   }
   if (pid == 0) {
-    // Child: dump and exit. Avoid returning into parent's event loop.
-    const Status st = SaveToDir();
+    const Status st = SaveToPath(child_path);
     _exit(st == Status::kOk ? 0 : 1);
   }
 
   child_pid_ = pid;
   EnsureReapTimer();
-  spdlog::info("Background SAVE started pid={}", static_cast<int>(pid));
+  spdlog::info("Background SAVE started pid={} path={}", static_cast<int>(pid),
+               pending_save_path_);
   return Status::kOk;
 }
 
@@ -359,7 +373,7 @@ void SnapshotManager::ReapSaveChild() {
   int status = 0;
   const pid_t r = ::waitpid(child_pid_, &status, WNOHANG);
   if (r == 0) {
-    return;  // still running
+    return;
   }
   if (r < 0) {
     if (errno == ECHILD) {
@@ -367,11 +381,25 @@ void SnapshotManager::ReapSaveChild() {
     }
     return;
   }
-  if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-    spdlog::info("Background SAVE finished ok pid={}", static_cast<int>(r));
+
+  const bool ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+  if (ok) {
+    spdlog::info("Background SAVE finished ok pid={} path={}",
+                 static_cast<int>(r), pending_save_path_);
+    // Persistence SAVE to dump.rdb also cleans legacy multi-file names.
+    if (!dir_.empty() && pending_save_path_ == Path(kRdbName)) {
+      RemoveLegacyDumpFiles();
+    }
   } else {
-    spdlog::error("Background SAVE failed pid={} status={}",
-                  static_cast<int>(r), status);
+    spdlog::error("Background SAVE failed pid={} status={} path={}",
+                  static_cast<int>(r), status, pending_save_path_);
   }
+
+  const std::string done_path = pending_save_path_;
+  pending_save_path_.clear();
   child_pid_ = -1;
+
+  if (save_done_cb_) {
+    save_done_cb_(ok, done_path);
+  }
 }

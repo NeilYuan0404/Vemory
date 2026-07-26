@@ -17,10 +17,11 @@
 
 ```bash
 make              # → bin/vemory
-./bin/vemory      # 监听 0.0.0.0:6379
+./bin/vemory      # 监听 0.0.0.0:6379（master）
 ./bin/vemory 8989 # 自定义端口
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI 端口会覆盖 server.port
+./bin/vemory --slaveof 127.0.0.1 6379 6380  # 从机：向主机 PSYNC 全量同步
 ```
 
 ```bash
@@ -179,6 +180,7 @@ client
 | 存储 | [`docs/Storage/StorageLayer.md`](docs/Storage/StorageLayer.md) |
 | 持久化 / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
 | 持久化 / AOF | [`docs/Persist/Aof.md`](docs/Persist/Aof.md) |
+| 复制 / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
 | 嵌入索引 / 向量集合 | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
 目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`），schema 在 `proto/VNode.proto`（供后续复制的编解码）。

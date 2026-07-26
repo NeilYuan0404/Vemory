@@ -62,7 +62,8 @@ SRC := $(wildcard src/net/*.cc) \
        $(wildcard src/storage/*.cc) \
        $(wildcard src/persist/*.cc) \
        $(wildcard src/mutate/*.cc) \
-       $(wildcard src/index/*.cc)
+       $(wildcard src/index/*.cc) \
+       $(wildcard src/replication/*.cc)
 
 OBJ := $(SRC:src/%.cc=$(BUILD_ROOT)/%.o) \
        $(BUILD_ROOT)/generated/VNode.pb.o \

@@ -8,6 +8,7 @@
 #include "vemory/storage/KvStore.h"
 #include "vemory/persist/SnapshotManager.h"
 #include "vemory/persist/WalManager.h"
+#include "vemory/replication/ReplicationMaster.h"
 #include "vemory/storage/VNodeIndex.h"
 
 // Facade: builds HandlerRegister and dispatches parsed requests.
@@ -15,7 +16,8 @@ class CommandHandler {
  public:
   CommandHandler(VNodeIndex* vnode_index, KvStore* kv,
                  SnapshotManager* snapshot = nullptr,
-                 WalManager* wal = nullptr);
+                 WalManager* wal = nullptr,
+                 ReplicationMaster* repl = nullptr);
 
   // Fills *reply with a RESP-encoded response string.
   void Dispatch(const RequestContext& ctx, std::string* reply);
@@ -25,6 +27,7 @@ class CommandHandler {
   KvStore* kv_;
   SnapshotManager* snapshot_;
   WalManager* wal_;
+  ReplicationMaster* repl_;
   KvsDispatchArg kvs_arg_{};
   VNodeDispatchArg vnode_arg_{};
   HandlerRegister register_;

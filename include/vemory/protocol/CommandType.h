@@ -15,6 +15,7 @@ enum class CommandType : uint8_t {
   kPing,
   kEcho,
   kSave,
+  kPsync,
   kUnknown,
 };
 

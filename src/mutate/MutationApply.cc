@@ -1,10 +1,11 @@
 #include "vemory/mutate/MutationApply.h"
 
 #include "vemory/persist/WalManager.h"
+#include "vemory/replication/ReplicationMaster.h"
 
 ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
                           VNodeIndex* vnode_index, KvStore* kv,
-                          WalManager* wal) {
+                          WalManager* wal, ReplicationMaster* repl) {
   ApplyResult out;
   bool should_append = true;
 
@@ -103,6 +104,10 @@ ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
       out.err = "aof append failed";
       return out;
     }
+  }
+
+  if (should_append && src == MutateSource::kClient && repl != nullptr) {
+    repl->FeedBacklog(entry);
   }
 
   out.ok = true;

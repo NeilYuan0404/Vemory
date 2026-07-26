@@ -8,6 +8,7 @@ Wire commands:
 - KVS (live): `SET` / `GET` / `DEL` → `KvStore`
 - Assist (live): `PING` / `ECHO`
 - Persistence (live): `SAVE` → `SnapshotManager` (fork background dump)
+- Replication (live): `PSYNC` → `ReplicationMaster` (tmp RDB fullsync + backlog)
 
 I/O: [`../Network/Reactor.md`](../Network/Reactor.md); storage: [`../Storage/StorageLayer.md`](../Storage/StorageLayer.md); persist: [`../Persist/Snapshot.md`](../Persist/Snapshot.md); ANN: [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md).
 
@@ -40,6 +41,7 @@ TcpConn::ReadCallback
 | `SET` `GET` `DEL` | `KvsDispatcher` | `arg` = `KvStore*` |
 | `PING` `ECHO` | `AssistDispatcher` | no store |
 | `SAVE` | `PersistDispatcher` | `arg` = `SnapshotManager*` |
+| `PSYNC` | `ReplicationDispatcher` | `arg` = `ReplicationMaster*` |
 
 ---
 
@@ -53,6 +55,7 @@ TcpConn::ReadCallback
 | `SET` / `GET` / `DEL` | string KVS | as Redis-style |
 | `PING` / `ECHO` | assist | |
 | `SAVE` | (none) | `+OK` or `-ERR …` (fork background RDB) |
+| `PSYNC` | (none) | async `+FULLRESYNC` + RDB bulk + backlog bulk (see [`../Persist/Replication.md`](../Persist/Replication.md)) |
 
 `vector_blob` / query blob: raw little-endian `float` bytes; `dim = len / sizeof(float)`.  
 `threshold`: cosine **distance** upper bound (hit iff best distance ≤ threshold).

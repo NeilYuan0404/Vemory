@@ -8,6 +8,7 @@
 #include "vemory/storage/VNodeIndex.h"
 
 class WalManager;
+class ReplicationMaster;
 
 enum class MutateSource : uint8_t {
   kClient = 0,
@@ -21,6 +22,7 @@ struct ApplyResult {
 };
 
 // Apply a WalEntry to memory. Appends to wal only for kClient when wal is set.
+// Feeds replication backlog when repl is non-null (independent of AOF).
 ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
                           VNodeIndex* vnode_index, KvStore* kv,
-                          WalManager* wal);
+                          WalManager* wal, ReplicationMaster* repl = nullptr);

@@ -4,6 +4,14 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- PSYNC fullsync replication: `ReplicationMaster` / `ReplicationSlave`, CLI `--slaveof <host> <port>`
+- Temp RDB under `tmp/` (`repl-fullsync.rdb` / `repl-in.rdb`) via `sendfile`; independent of `persistence.dir`
+- In-memory replication backlog (WalEntry frames) for writes during the fullsync window
+- `SnapshotManager::BackgroundSaveToPath` / `LoadFromPath` (path API does not require configured dir)
+- `TcpConn::SendFile`, `TcpConnector::Connect`
+- Docs: [`docs/Persist/Replication.md`](docs/Persist/Replication.md)
+
 ### Changed
 - RDB snapshot is a single file `dump.rdb` (Header + TOC + KV/NODES/USEARCH); magic `VEMORYDB`, version 2
 - `USearchEmbedIndex` / `VNodeIndex` index persist via `FILE*` streams (`save_to_stream` / `load_from_stream`)

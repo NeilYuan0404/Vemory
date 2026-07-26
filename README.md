@@ -21,7 +21,7 @@ make              # → bin/vemory
 ./bin/vemory 8989 # custom port
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI port overrides server.port
-./bin/vemory --slaveof 127.0.0.1 6379 6380  # replica: PSYNC fullsync from master
+./bin/vemory --slaveof 127.0.0.1 6379 6380  # replica: PSYNC fullsync + stream
 ```
 
 ```bash

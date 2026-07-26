@@ -21,6 +21,12 @@ TcpConn::TcpConn(int fd, EventLoop& evloop)
 
 TcpConn::~TcpConn() { Close(); }
 
+size_t TcpConn::OutputBufferedBytes() const {
+  size_t n = output_buffer_.size() + post_sendfile_buffer_.size();
+  n += static_cast<size_t>(sendfile_remaining_);
+  return n;
+}
+
 int TcpConn::Send(const char* data, size_t size) {
   if (closed_ || data == nullptr || size == 0) return -1;
 

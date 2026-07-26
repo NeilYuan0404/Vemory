@@ -23,6 +23,9 @@ class ReplicationBacklog {
   // On overflow, advances base_ (drops oldest bytes).
   bool Feed(const vemory::WalEntry& entry);
 
+  // Append a pre-encoded frame (u32le + protobuf). Same overflow rules as Feed.
+  bool FeedEncoded(std::string_view frame);
+
   // True if logical offset is still retained in the ring.
   bool Contains(uint64_t offset) const;
 

@@ -8,8 +8,9 @@ All notable changes to Vemory are documented in this file.
 - PSYNC fullsync replication: `ReplicationMaster` / `ReplicationSlave`, CLI `--slaveof <host> <port>`
 - Temp RDB under `tmp/` (`repl-fullsync.rdb` / `repl-in.rdb`) via `sendfile`; independent of `persistence.dir`
 - In-memory replication backlog (WalEntry frames) for writes during the fullsync window
+- Post-fullsync streaming: main-thread direct push of WalEntry frames to `kSynced` replicas (32 MiB output buffer kick)
 - `SnapshotManager::BackgroundSaveToPath` / `LoadFromPath` (path API does not require configured dir)
-- `TcpConn::SendFile`, `TcpConnector::Connect`
+- `TcpConn::SendFile`, `OutputBufferedBytes`, `ForceClose`; `TcpConnector::Connect`
 - Docs: [`docs/Persist/Replication.md`](docs/Persist/Replication.md)
 
 ### Changed

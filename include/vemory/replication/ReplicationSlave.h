@@ -9,7 +9,7 @@
 #include "vemory/storage/KvStore.h"
 #include "vemory/storage/VNodeIndex.h"
 
-// Slave-side: connect master, PSYNC, receive tmp RDB + backlog, Load + apply.
+// Slave-side: connect master, PSYNC, receive tmp RDB + backlog, then stream.
 class ReplicationSlave {
  public:
   static constexpr const char* kTmpDir = "tmp";
@@ -23,7 +23,7 @@ class ReplicationSlave {
     kRecvRdbBody,
     kRecvBacklogHeader,
     kRecvBacklogBody,
-    kDone,
+    kStreaming,
     kError,
   };
 
@@ -35,6 +35,12 @@ class ReplicationSlave {
 
   State state() const { return state_; }
 
+  // Parse and apply zero or more complete u32le+WalEntry frames from *bytes.
+  // Consumes complete frames from the front of *bytes; leaves a partial frame.
+  // Returns false on corrupt frame.
+  static bool ConsumeStreamFrames(std::string* bytes, VNodeIndex* vnode_index,
+                                  KvStore* kv, std::string* err);
+
  private:
   void OnReadable();
   bool EnsureTmpDir();
@@ -43,6 +49,7 @@ class ReplicationSlave {
   bool WriteRdbChunk(const char* data, std::size_t n);
   bool FinishRdbAndLoad();
   bool ApplyBacklog(const std::string& bytes);
+  bool DrainStreaming();
   void Fail(const std::string& msg);
 
   EventLoop* loop_;
@@ -55,4 +62,5 @@ class ReplicationSlave {
   int64_t backlog_remaining_ = -1;
   FILE* rdb_fp_ = nullptr;
   std::string backlog_buf_;
+  std::string stream_buf_;
 };

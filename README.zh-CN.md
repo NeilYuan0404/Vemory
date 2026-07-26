@@ -21,7 +21,7 @@ make              # → bin/vemory
 ./bin/vemory 8989 # 自定义端口
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI 端口会覆盖 server.port
-./bin/vemory --slaveof 127.0.0.1 6379 6380  # 从机：向主机 PSYNC 全量同步
+./bin/vemory --slaveof 127.0.0.1 6379 6380  # 从机：PSYNC 全量 + 增量直推
 ```
 
 ```bash

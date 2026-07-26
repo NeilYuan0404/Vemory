@@ -26,6 +26,9 @@ class TcpConn : public std::enable_shared_from_this<TcpConn> {
   int Fd() const { return fd_; }
   bool closed() const { return closed_; }
 
+  // Bytes pending in userspace / in-flight sendfile (for replica soft limits).
+  size_t OutputBufferedBytes() const;
+
   // Unconsumed read buffer for protocol parsers (RESP path).
   MessageBuffer& InputBuffer() { return input_buffer_; }
 
@@ -34,6 +37,9 @@ class TcpConn : public std::enable_shared_from_this<TcpConn> {
   // After output_buffer_ drains, stream file via sendfile. Calls done when
   // finished or on error (connection may already be closed on failure).
   bool SendFile(const std::string& path, SendFileDoneCallback done = {});
+
+  // Public close for replication (kick slow replica).
+  void ForceClose() { Close(); }
 
  private:
   static void SetNonBlocking(int fd);

@@ -58,7 +58,7 @@ bool ReplicationSlave::Start(const std::string& host, uint16_t port) {
   conn_->Send(psync, sizeof(psync) - 1);
   conn_->SetReadCallback([this]() { OnReadable(); });
   conn_->SetCloseCallback([this]() {
-    if (state_ != State::kDone) {
+    if (state_ != State::kError) {
       Fail("connection closed");
     }
   });
@@ -165,39 +165,74 @@ bool ReplicationSlave::FinishRdbAndLoad() {
   return true;
 }
 
-bool ReplicationSlave::ApplyBacklog(const std::string& bytes) {
+bool ReplicationSlave::ConsumeStreamFrames(std::string* bytes,
+                                           VNodeIndex* vnode_index, KvStore* kv,
+                                           std::string* err) {
+  if (bytes == nullptr) {
+    return false;
+  }
   std::size_t off = 0;
-  while (off + 4 <= bytes.size()) {
+  while (off + 4 <= bytes->size()) {
     unsigned char len_buf[4];
-    std::memcpy(len_buf, bytes.data() + off, 4);
+    std::memcpy(len_buf, bytes->data() + off, 4);
     const uint32_t plen = ReadU32Le(len_buf);
-    off += 4;
-    if (off + plen > bytes.size()) {
-      Fail("truncated backlog frame");
-      return false;
+    if (off + 4 + plen > bytes->size()) {
+      break;  // partial frame
     }
+    off += 4;
     vemory::WalEntry entry;
-    if (!entry.ParseFromArray(bytes.data() + off, static_cast<int>(plen))) {
-      Fail("bad backlog protobuf");
+    if (!entry.ParseFromArray(bytes->data() + off, static_cast<int>(plen))) {
+      if (err != nullptr) {
+        *err = "bad wal protobuf";
+      }
       return false;
     }
     off += plen;
-    const auto r = ApplyMutation(entry, MutateSource::kAofReplay, vnode_index_,
-                                 kv_, nullptr);
+    const auto r = ApplyMutation(entry, MutateSource::kAofReplay, vnode_index,
+                                 kv, nullptr);
     if (!r.ok) {
-      Fail("backlog apply: " + r.err);
+      if (err != nullptr) {
+        *err = "apply: " + r.err;
+      }
       return false;
     }
   }
-  if (off != bytes.size()) {
-    Fail("backlog trailing garbage");
+  if (off > 0) {
+    bytes->erase(0, off);
+  }
+  return true;
+}
+
+bool ReplicationSlave::ApplyBacklog(const std::string& bytes) {
+  std::string buf = bytes;
+  std::string err;
+  if (!ConsumeStreamFrames(&buf, vnode_index_, kv_, &err)) {
+    Fail(err.empty() ? "backlog apply failed" : err);
+    return false;
+  }
+  if (!buf.empty()) {
+    Fail("truncated backlog frame");
+    return false;
+  }
+  return true;
+}
+
+bool ReplicationSlave::DrainStreaming() {
+  auto [pdata, avail] = conn_->InputBuffer().GetAllData();
+  if (pdata != nullptr && avail > 0) {
+    stream_buf_.append(pdata, avail);
+    conn_->InputBuffer().ReadCompleted(avail);
+  }
+  std::string err;
+  if (!ConsumeStreamFrames(&stream_buf_, vnode_index_, kv_, &err)) {
+    Fail(err.empty() ? "stream apply failed" : err);
     return false;
   }
   return true;
 }
 
 void ReplicationSlave::OnReadable() {
-  if (!conn_ || state_ == State::kError || state_ == State::kDone) {
+  if (!conn_ || state_ == State::kError) {
     return;
   }
 
@@ -275,9 +310,9 @@ void ReplicationSlave::OnReadable() {
       backlog_buf_.reserve(static_cast<std::size_t>(len));
       state_ = State::kRecvBacklogBody;
       if (backlog_remaining_ == 0) {
-        state_ = State::kDone;
-        spdlog::info("slave: fullsync done (empty backlog)");
-        return;
+        state_ = State::kStreaming;
+        spdlog::info("slave: fullsync done (empty backlog); streaming");
+        continue;
       }
       continue;
     }
@@ -298,12 +333,19 @@ void ReplicationSlave::OnReadable() {
         if (!ApplyBacklog(backlog_buf_)) {
           return;
         }
-        state_ = State::kDone;
-        spdlog::info("slave: fullsync done backlog_bytes={}",
-                     backlog_buf_.size());
-        return;
+        backlog_buf_.clear();
+        state_ = State::kStreaming;
+        spdlog::info("slave: fullsync done; streaming");
+        continue;
       }
       continue;
+    }
+
+    if (state_ == State::kStreaming) {
+      if (!DrainStreaming()) {
+        return;
+      }
+      return;
     }
 
     return;

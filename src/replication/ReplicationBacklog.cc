@@ -41,6 +41,13 @@ bool ReplicationBacklog::Feed(const vemory::WalEntry& entry) {
   if (!EncodeFrame(entry, &frame)) {
     return false;
   }
+  return FeedEncoded(frame);
+}
+
+bool ReplicationBacklog::FeedEncoded(std::string_view frame) {
+  if (frame.empty()) {
+    return true;
+  }
   if (frame.size() > buf_.size()) {
     // Single frame larger than ring — drop all and keep only tip advance
     // with empty retention (Contains will fail for old offsets).

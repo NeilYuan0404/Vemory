@@ -11,6 +11,7 @@
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/RequestContext.h"
 #include "vemory/replication/ReplicationBacklog.h"
+#include "vemory/replication/ReplicationSlave.h"
 #include "vemory/storage/KvStore.h"
 #include "vemory/storage/VNodeIndex.h"
 
@@ -92,6 +93,59 @@ TEST(ReplicationBacklog, OverflowAdvancesBase) {
   EXPECT_FALSE(bl.Contains(start));
   EXPECT_TRUE(bl.Contains(bl.base()));
   EXPECT_TRUE(bl.Contains(bl.tip()));
+}
+
+TEST(ReplicationBacklog, FeedEncodedRoundTrip) {
+  ReplicationBacklog bl(1024);
+  vemory::WalEntry e;
+  e.set_op(vemory::WalEntry::SET);
+  e.set_key("x");
+  e.set_value("y");
+  std::string frame;
+  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e, &frame));
+  const uint64_t start = bl.tip();
+  ASSERT_TRUE(bl.FeedEncoded(frame));
+  std::string out;
+  ASSERT_TRUE(bl.CopyRange(start, bl.tip(), &out));
+  EXPECT_EQ(out, frame);
+}
+
+TEST(ReplicationSlave, ConsumeStreamFrames_PartialAndMulti) {
+  VNodeIndex idx(16);
+  KvStore kv;
+
+  vemory::WalEntry e1;
+  e1.set_op(vemory::WalEntry::SET);
+  e1.set_key("a");
+  e1.set_value("1");
+  vemory::WalEntry e2;
+  e2.set_op(vemory::WalEntry::SET);
+  e2.set_key("b");
+  e2.set_value("2");
+
+  std::string f1;
+  std::string f2;
+  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e1, &f1));
+  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e2, &f2));
+
+  std::string buf = f1 + f2;
+  // Truncate last byte → one complete frame + partial.
+  buf.pop_back();
+  std::string err;
+  ASSERT_TRUE(
+      ReplicationSlave::ConsumeStreamFrames(&buf, &idx, &kv, &err));
+  EXPECT_EQ(buf.size(), f2.size() - 1);
+  std::string val;
+  ASSERT_EQ(kv.Get("a", &val), KvStore::Status::kOk);
+  EXPECT_EQ(val, "1");
+  EXPECT_EQ(kv.Get("b", &val), KvStore::Status::kNotFound);
+
+  buf.push_back(f2.back());
+  ASSERT_TRUE(
+      ReplicationSlave::ConsumeStreamFrames(&buf, &idx, &kv, &err));
+  EXPECT_TRUE(buf.empty());
+  ASSERT_EQ(kv.Get("b", &val), KvStore::Status::kOk);
+  EXPECT_EQ(val, "2");
 }
 
 TEST(SnapshotManager, SaveToPathWithoutPersistenceDir) {

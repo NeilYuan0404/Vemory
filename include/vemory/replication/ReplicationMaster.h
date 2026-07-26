@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -15,6 +16,8 @@ class ReplicationMaster {
  public:
   static constexpr const char* kTmpDir = "tmp";
   static constexpr const char* kFullsyncPath = "tmp/repl-fullsync.rdb";
+  // Soft limit on replica output buffer (Redis-style kick).
+  static constexpr std::size_t kReplicaOutputLimit = 32u * 1024u * 1024u;
 
   enum class SlaveState : uint8_t {
     kWaitRdb = 0,

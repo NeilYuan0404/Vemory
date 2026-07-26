@@ -60,31 +60,51 @@ void ReplicationMaster::FeedBacklog(const vemory::WalEntry& entry) {
   if (!fullsync_active_ && slaves_.empty()) {
     return;
   }
-  if (!backlog_.Feed(entry)) {
+
+  std::string frame;
+  if (!ReplicationBacklog::EncodeFrame(entry, &frame)) {
     spdlog::warn("replication backlog encode failed");
     return;
   }
-  // Disconnect slaves whose start offset fell out of the ring.
+  if (!backlog_.FeedEncoded(frame)) {
+    spdlog::warn("replication backlog feed failed");
+    return;
+  }
+
   std::vector<int> drop;
   for (auto& [fd, slave] : slaves_) {
     if (slave.state == SlaveState::kSynced) {
+      if (!slave.conn || slave.conn->closed()) {
+        drop.push_back(fd);
+        continue;
+      }
+      // Direct push (main thread); skip slaves still in fullsync.
+      slave.conn->Send(frame.data(), frame.size());
+      if (slave.conn->OutputBufferedBytes() > kReplicaOutputLimit) {
+        spdlog::warn(
+            "replica output buffer exceeded limit; kicking slave fd={} buffered={}",
+            fd, slave.conn->OutputBufferedBytes());
+        drop.push_back(fd);
+      }
       continue;
     }
+    // Fullsync waiters: drop if backlog start fell out of the ring.
     if (!backlog_.Contains(slave.backlog_start)) {
       drop.push_back(fd);
     }
   }
   for (int fd : drop) {
-    spdlog::warn("replication backlog overflow; dropping slave fd={}", fd);
     auto* s = FindSlave(fd);
-    if (s != nullptr && s->conn) {
-      // Close triggers RemoveSlave via close_cb.
-      // Intentionally leave Close private — erase and let peer timeout,
-      // or send error then rely on erase.
-      const std::string err = "-ERR backlog overflow\r\n";
-      s->conn->Send(err.data(), err.size());
+    if (s != nullptr && s->conn && !s->conn->closed()) {
+      if (s->state != SlaveState::kSynced) {
+        spdlog::warn("replication backlog overflow; dropping slave fd={}", fd);
+        const std::string err = "-ERR backlog overflow\r\n";
+        s->conn->Send(err.data(), err.size());
+      }
+      s->conn->ForceClose();
+    } else {
+      slaves_.erase(fd);
     }
-    slaves_.erase(fd);
   }
 }
 

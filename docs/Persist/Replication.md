@@ -1,6 +1,6 @@
-# Persist Layer — Replication (PSYNC fullsync)
+# Persist Layer — Replication (PSYNC + stream)
 
-Master/slave full resynchronization using a temporary RDB under `tmp/` plus an in-memory backlog for writes during the sync window. Independent of local RDB persistence (`persistence.dir` / `dump.rdb` / `SAVE`).
+Master/slave replication: temporary RDB fullsync under `tmp/`, in-memory backlog for the sync window, then **main-thread direct push** of `WalEntry` frames to synced replicas (Redis-style). Independent of local RDB persistence (`persistence.dir` / `dump.rdb` / `SAVE`).
 
 ---
 
@@ -8,8 +8,8 @@ Master/slave full resynchronization using a temporary RDB under `tmp/` plus an i
 
 | Mode | How | Behavior |
 |------|-----|----------|
-| Master (default) | no `--slaveof` | Accepts `PSYNC`, tracks slaves, generates `tmp/repl-fullsync.rdb`, `sendfile` + backlog |
-| Slave | `--slaveof <host> <port>` | Connects to master, sends `PSYNC`, loads `tmp/repl-in.rdb`, applies backlog |
+| Master (default) | no `--slaveof` | Accepts `PSYNC`, fullsync via `tmp/repl-fullsync.rdb` + backlog, then streams writes |
+| Slave | `--slaveof <host> <port>` | `PSYNC`, load `tmp/repl-in.rdb`, apply backlog, then stream apply |
 
 Slave still listens on its local port for clients.
 
@@ -41,19 +41,23 @@ Master → slave:
 $<rdb_nbytes>\r\n
 <rdb bytes>              # sendfile(tmp/repl-fullsync.rdb)
 $<backlog_nbytes>\r\n
-<backlog bytes>          # u32le + WalEntry frames (AOF-compatible)
+<backlog bytes>           # u32le + WalEntry frames (AOF-compatible)
+# then continuous bare frames (no RESP wrapper):
+<u32le len><WalEntry proto> ...
 ```
 
 ---
 
-## Backlog
+## Backlog + direct push
 
 - Ring buffer (default 16 MiB) of encoded `WalEntry` frames
-- Fed on successful client mutations via `ReplicationMaster::FeedBacklog` (independent of disk AOF)
-- Fullsync start records `backlog_start_offset`; after RDB sendfile, master sends `[start, tip)`
-- Overflow that drops a slave’s start offset → slave dropped (next PSYNC retries fullsync)
+- On successful client mutation: **encode once** → append backlog → `Send` to each `kSynced` slave (main thread)
+- Slaves still in fullsync (`kWaitRdb` / `kSending*`) only receive via the backlog bulk, not live `Send`
+- Fullsync start records `backlog_start_offset`; after RDB sendfile, master sends `[start, tip)` as the second RESP bulk
+- Overflow that drops a waiter’s start offset → that slave is dropped (retry PSYNC)
+- Synced replica **output buffer soft limit: 32 MiB** (`TcpConn::OutputBufferedBytes`); exceeded → kick replica (`ForceClose`)
 
-MVP: after RDB + backlog, slave is `kSynced`; no continuous streaming after that.
+No dedicated replication I/O thread.
 
 ---
 
@@ -77,12 +81,10 @@ Wire: `PSYNC` → `ReplicationDispatcher` → `ReplicationMaster::OnPsync`.
 # master
 ./bin/vemory 6379
 
-# seed data (optional; no SAVE required)
-redis-cli -p 6379 SET hello world
-
 # slave
 ./bin/vemory --slaveof 127.0.0.1 6379 6380
 
-# after fullsync
+# after fullsync, writes on master appear on slave
+redis-cli -p 6379 SET hello world
 redis-cli -p 6380 GET hello
 ```

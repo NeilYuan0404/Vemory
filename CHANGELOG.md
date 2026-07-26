@@ -2,6 +2,11 @@
 
 All notable changes to Vemory are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Build links gperftools `libtcmalloc_minimal` by default for the process heap (`TCMALLOC=0` to disable); usearch vector storage remains on its mmap arenas
+
 ## [0.5.0] — 2026-07-26
 
 PSYNC master/slave replication (fullsync + stream) and single-file RDB v2.

@@ -10,18 +10,21 @@
 
 - C++17 工具链（`g++`）
 - [Protocol Buffers](https://protobuf.dev/)（`protoc`、`libprotobuf`）——AOF / 复制 `WalEntry` 帧
+- [gperftools](https://github.com/gperftools/gperftools) `libtcmalloc_minimal`——Vemory 全局堆（STL / protobuf / `new`）；Debian/Ubuntu：`apt install libgoogle-perftools-dev`。内置 usearch 仍使用自有 `mmap` arena（不由 tcmalloc 管理）。无该库时可 `TCMALLOC=0` 关闭。
 - 已内置 [usearch](https://github.com/unum-cloud/usearch)，位于 `third_party/usearch`（可用 `make usearch-fetch` 刷新）
 - 已内置 [spdlog](https://github.com/gabime/spdlog)，位于 `third_party/spdlog`（可用 `make spdlog-fetch` 刷新）
 
 ## 构建与运行
 
 ```bash
-make              # → bin/vemory
+make              # → bin/vemory（默认链接 tcmalloc_minimal）
+make TCMALLOC=0   # 使用系统分配器，不链接 tcmalloc
 ./bin/vemory      # 监听 0.0.0.0:6379（master）
 ./bin/vemory 8989 # 自定义端口
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI 端口会覆盖 server.port
 ./bin/vemory --slaveof 127.0.0.1 6379 6380  # 从机：PSYNC 全量 + 增量直推
+ldd bin/vemory | grep tcmalloc   # 可选：确认已链接 tcmalloc
 ```
 
 ```bash
@@ -63,6 +66,7 @@ bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree�
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE 频率 vs SET QPS
 python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
 AUTO_SLAVE=1 python3 bench/repl_bench.py                 # 主从同步 SET/GET（串行：无从 → 已同步从）
+bench/.venv/bin/python bench/tcmalloc_mem_bench.py       # tcmalloc 开/关 RSS/VIRT（脚本自启服务）
 ```
 
 ### 最近一次 pipeline 结果
@@ -147,6 +151,18 @@ ECHO（vemory_no_repl）：**13698.63** rps
 | vemory_repl | 9903.93 | 13140.60 |
 
 仅供参考——单线程事件循环；从库已同步后，写路径会编码并在主线程 `Send` 给从。两阶段串行，避免无从/有从两套拓扑同时抢 CPU。
+
+### 最近一次 tcmalloc 内存对比
+
+运行：`bench/.venv/bin/python bench/tcmalloc_mem_bench.py`  
+（release 构建；`N=300000`，`D=64`；字符串 `SET` 再 `DEL`；采样 `/proc` RSS/VIRT；不含 usearch 路径）
+
+| 模式 | 初始 RSS (MB) | 初始 VIRT (MB) | 插入峰值 RSS (MB) | 插入峰值 VIRT (MB) | 清空后最终 RSS (MB) | 清空后最终 VIRT (MB) |
+|------|-------------:|--------------:|-----------------:|------------------:|-------------------:|--------------------:|
+| tcmalloc 开启 | 29.07 | 39.22 | 75.47 | 85.22 | 75.47 | 85.22 |
+| tcmalloc 关闭 | 24.18 | 28.62 | 74.77 | 79.02 | 74.77 | 79.02 |
+
+开/关峰值 RSS 接近。`DEL` 后最终 RSS 仍接近峰值属预期（分配器高水位滞留 + `unordered_map` 桶容量保留），单独看不能当作泄漏。详见 [`bench/README.md`](bench/README.md)。
 
 其他目标：
 

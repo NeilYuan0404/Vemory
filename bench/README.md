@@ -4,7 +4,7 @@ Requires a running server (`./bin/vemory` or `./bin/vemory <port>`).
 
 Default: `HOST=127.0.0.1`, `PORT=6379`.
 
-Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`, `repl.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`repl_bench.py`](repl_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
+Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`, `repl.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`repl_bench.py`](repl_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py), [`tcmalloc_mem_bench.py`](tcmalloc_mem_bench.py).
 
 Semantic-cache vector benches use **Python + redis-py** (raw float32 blobs). Prefer `bench/.venv` after `pip install -r bench/requirements.txt`.
 
@@ -359,6 +359,35 @@ ECHO (vemory_no_repl): **13698.63** rps
 | vemory_repl | 9903.93 | 13140.60 |
 
 Sequential phases on one master; with a synced replica, SET pays main-thread stream push.
+
+## tcmalloc memory compare (`tcmalloc_mem_bench.py`)
+
+RSS/VIRT compare with **tcmalloc on vs off** (string `SET` insert, then `DEL` clear — no `VSET`, so usearch mmap is out of the picture). Self-starts two private servers; samples `/proc/<pid>/status`.
+
+Needs: Linux/WSL, `redis-py` (`bench/.venv`, uses RESP2 `protocol=2`), and gperftools `libtcmalloc_minimal` when building the on side (`TCMALLOC=1`).
+
+```bash
+# default: BUILD=1 makes bin/vemory.tcmalloc + bin/vemory.sys, then runs N=300000 D=64
+PKG_CONFIG_PATH=$HOME/.local/lib/pkgconfig LD_LIBRARY_PATH=$HOME/.local/lib \
+  bench/.venv/bin/python bench/tcmalloc_mem_bench.py
+
+N=100000 D=64 BUILD=0 \
+  BIN_TCMALLOC=bin/vemory.tcmalloc BIN_SYS=bin/vemory.sys \
+  bench/.venv/bin/python bench/tcmalloc_mem_bench.py
+```
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `N` | `300000` | Keys to `SET` then `DEL` |
+| `D` | `64` | Value size (bytes) |
+| `PORT` | `16380` | tcmalloc-on listen port (`PORT+1` for off) |
+| `SAMPLE_MS` | `50` | Peak RSS/VIRT sample interval during insert |
+| `SETTLE_S` | `0.5` | Wait after clear before final sample |
+| `BUILD` | `1` | `make TCMALLOC=1/0` and copy to `bin/vemory.tcmalloc` / `bin/vemory.sys` |
+| `PIPE` | `1000` | redis-py pipeline batch size |
+| `BIN_TCMALLOC` / `BIN_SYS` | `bin/vemory.tcmalloc` / `bin/vemory.sys` | Override binaries |
+
+Prints a Markdown table (初始 / 插入峰值 / 清空后最终 RSS & VIRT) plus a CSV row block.
 
 ## Notes
 

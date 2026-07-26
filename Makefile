@@ -41,6 +41,26 @@ PROTOBUF_LIBS := -lprotobuf
 endif
 LDFLAGS  := $(PROTOBUF_LIBS)
 
+# Global heap via gperftools tcmalloc_minimal (STL/protobuf/new). usearch mmap is unchanged.
+# Default on; disable with TCMALLOC=0. Debian/Ubuntu: apt install libgoogle-perftools-dev
+# Skip the hard requirement for goals that do not link (e.g. clean, proto, *-fetch).
+TCMALLOC ?= 1
+TCMALLOC_SKIP_GOALS := clean proto usearch-fetch spdlog-fetch gtest-fetch compile-commands
+TCMALLOC_NEED_LIB := $(if $(filter $(TCMALLOC_SKIP_GOALS),$(MAKECMDGOALS)),0,1)
+ifeq ($(TCMALLOC),1)
+  TCMALLOC_LIBS := $(shell pkg-config --libs libtcmalloc_minimal 2>/dev/null)
+  ifeq ($(TCMALLOC_LIBS),)
+    TCMALLOC_LIBS := -ltcmalloc_minimal
+  endif
+  ifeq ($(TCMALLOC_NEED_LIB),1)
+    TCMALLOC_OK := $(shell echo 'int main(){return 0;}' | $(CXX) -x c++ -o /dev/null - $(TCMALLOC_LIBS) 2>/dev/null && echo yes)
+    ifneq ($(TCMALLOC_OK),yes)
+      $(error libtcmalloc_minimal not found. Install gperftools (e.g. apt install libgoogle-perftools-dev), export PKG_CONFIG_PATH if installed under ~/.local, or build with TCMALLOC=0)
+    endif
+  endif
+  LDFLAGS += $(TCMALLOC_LIBS)
+endif
+
 # Optional liburing for AOF io_uring backend (fallback to thread if missing).
 LIBURING_CFLAGS := $(shell pkg-config --cflags liburing 2>/dev/null)
 LIBURING_LIBS   := $(shell pkg-config --libs liburing 2>/dev/null)

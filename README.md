@@ -10,18 +10,21 @@ RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP cl
 
 - C++17 toolchain (`g++`)
 - [Protocol Buffers](https://protobuf.dev/) (`protoc`, `libprotobuf`) — AOF / replication `WalEntry` frames
+- [gperftools](https://github.com/gperftools/gperftools) `libtcmalloc_minimal` — global heap for Vemory (STL / protobuf / `new`); Debian/Ubuntu: `apt install libgoogle-perftools-dev`. Vendored usearch still uses its own `mmap` arenas (not managed by tcmalloc). Disable with `TCMALLOC=0` if the library is unavailable.
 - Vendored [usearch](https://github.com/unum-cloud/usearch) under `third_party/usearch` (already in tree; refresh with `make usearch-fetch`)
 - Vendored [spdlog](https://github.com/gabime/spdlog) under `third_party/spdlog` (already in tree; refresh with `make spdlog-fetch`)
 
 ## Build & run
 
 ```bash
-make              # → bin/vemory
+make              # → bin/vemory (links tcmalloc_minimal by default)
+make TCMALLOC=0   # system allocator instead of tcmalloc
 ./bin/vemory      # listen 0.0.0.0:6379 (master)
 ./bin/vemory 8989 # custom port
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI port overrides server.port
 ./bin/vemory --slaveof 127.0.0.1 6379 6380  # replica: PSYNC fullsync + stream
+ldd bin/vemory | grep tcmalloc   # optional: confirm linkage
 ```
 
 ```bash
@@ -63,6 +66,7 @@ bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree�
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE frequency vs SET QPS
 python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
 AUTO_SLAVE=1 python3 bench/repl_bench.py                 # replication SET/GET (sequential no-repl then synced slave)
+bench/.venv/bin/python bench/tcmalloc_mem_bench.py       # tcmalloc on/off RSS/VIRT (self-starts servers)
 ```
 
 ### Latest pipeline result
@@ -147,6 +151,18 @@ ECHO (vemory_no_repl): **13698.63** rps
 | vemory_repl | 9903.93 | 13140.60 |
 
 Indicative only — single-threaded event loop; with a synced replica, writes encode + main-thread `Send` to the slave. Sequential phases avoid concurrent topologies contending for CPU.
+
+### Latest tcmalloc memory compare
+
+Run: `bench/.venv/bin/python bench/tcmalloc_mem_bench.py`  
+(release builds; `N=300000`, `D=64`; string `SET` then `DEL`; samples `/proc` RSS/VIRT; usearch not in path)
+
+| Mode | Initial RSS (MB) | Initial VIRT (MB) | Peak RSS (MB) | Peak VIRT (MB) | Final RSS (MB) | Final VIRT (MB) |
+|------|-----------------:|------------------:|--------------:|---------------:|---------------:|----------------:|
+| tcmalloc on | 29.07 | 39.22 | 75.47 | 85.22 | 75.47 | 85.22 |
+| tcmalloc off | 24.18 | 28.62 | 74.77 | 79.02 | 74.77 | 79.02 |
+
+Peak RSS is similar with or without tcmalloc. Final RSS staying near the peak after `DEL` is expected (allocator high-water retention + `unordered_map` bucket capacity); it is not by itself a leak. See [`bench/README.md`](bench/README.md).
 
 Other targets:
 

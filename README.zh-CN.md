@@ -4,12 +4,12 @@
 
 兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串可用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
 
-**v0.4.1 — 早期 MVP。** 可选单文件 RDB 快照（`SAVE` / `persistence.dir` → `dump.rdb`），以及可选 Protobuf AOF（`persistence.aof`，后台批量刷盘，`aof_fsync` / `aof_io`）。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v0.5.0 — 早期 MVP（含可选持久化与主从复制）。** 单文件 RDB（`SAVE` / `dump.rdb`）、Protobuf AOF（`persistence.aof`），以及 PSYNC 全量 + 增量直推（`--slaveof`）。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 
 - C++17 工具链（`g++`）
-- [Protocol Buffers](https://protobuf.dev/)（`protoc`、`libprotobuf`）——编解码保留，供后续复制使用
+- [Protocol Buffers](https://protobuf.dev/)（`protoc`、`libprotobuf`）——AOF / 复制 `WalEntry` 帧
 - 已内置 [usearch](https://github.com/unum-cloud/usearch)，位于 `third_party/usearch`（可用 `make usearch-fetch` 刷新）
 - 已内置 [spdlog](https://github.com/gabime/spdlog)，位于 `third_party/spdlog`（可用 `make spdlog-fetch` 刷新）
 
@@ -57,11 +57,12 @@ redis-cli -p 8989
 ./bench/smoke/pipeline.sh  # c=1 管道冒烟（仅 Vemory）
 ./bench/smoke/vector.sh    # VSET 灌库 + VGET + VDEL 抽检（redis-py）
 ./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.rdb → VGET（需 persistence.dir）
+AUTO_SLAVE=1 ./bench/smoke/repl.sh               # PSYNC 全量 + 增量（需 master 已启动）
 python3 bench/pipeline_bench.py                  # c=1 SET/GET：Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95（见 bench/README.md）
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE 频率 vs SET QPS
 python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
-python3 bench/repl_bench.py                              # 主从同步 SET/GET（串行：无从 → 已同步从）
+AUTO_SLAVE=1 python3 bench/repl_bench.py                 # 主从同步 SET/GET（串行：无从 → 已同步从）
 ```
 
 ### 最近一次 pipeline 结果
@@ -198,4 +199,4 @@ client
 | 复制 / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
 | 嵌入索引 / 向量集合 | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
-目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`），schema 在 `proto/VNode.proto`（供后续复制的编解码）。
+目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`、`replication/`），schema 在 `proto/`（`VNode.proto`、`WalEntry.proto`）。

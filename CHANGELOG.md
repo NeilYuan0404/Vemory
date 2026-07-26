@@ -2,7 +2,9 @@
 
 All notable changes to Vemory are documented in this file.
 
-## [Unreleased]
+## [0.5.0] — 2026-07-26
+
+PSYNC master/slave replication (fullsync + stream) and single-file RDB v2.
 
 ### Added
 - PSYNC fullsync replication: `ReplicationMaster` / `ReplicationSlave`, CLI `--slaveof <host> <port>`
@@ -12,6 +14,8 @@ All notable changes to Vemory are documented in this file.
 - `SnapshotManager::BackgroundSaveToPath` / `LoadFromPath` (path API does not require configured dir)
 - `TcpConn::SendFile`, `OutputBufferedBytes`, `ForceClose`; `TcpConnector::Connect`
 - Docs: [`docs/Persist/Replication.md`](docs/Persist/Replication.md)
+- Smoke: [`bench/smoke/repl.sh`](bench/smoke/repl.sh); demo: [`demo/04_repl.py`](demo/04_repl.py)
+- Bench: [`bench/repl_bench.py`](bench/repl_bench.py) (SET/GET with synced replica)
 
 ### Changed
 - RDB snapshot is a single file `dump.rdb` (Header + TOC + KV/NODES/USEARCH); magic `VEMORYDB`, version 2
@@ -19,7 +23,13 @@ All notable changes to Vemory are documented in this file.
 - Successful `SAVE` removes legacy multi-file names (`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`)
 
 ### Breaking
-- Old multi-file RDB layouts are no longer loaded; re-`SAVE` after upgrade
+- Old multi-file RDB layouts (`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`) are no longer loaded; re-`SAVE` after upgrade to produce `dump.rdb`
+
+### Limits
+- No PSYNC partial resync / replication offset / replid — disconnect always needs a new fullsync
+- Slave does not auto-reconnect after link failure (enters error state; restart with `--slaveof`)
+- Slave still accepts client writes (no forced replica-readonly)
+- No AOF rewrite after SAVE (unchanged from 0.4.x)
 
 ## [0.4.1] — 2026-07-25
 

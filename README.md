@@ -4,12 +4,12 @@ English | [中文](README.zh-CN.md)
 
 RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
 
-**v0.4.1** — early MVP. Optional single-file RDB snapshot (`SAVE` / `persistence.dir` → `dump.rdb`) plus optional protobuf AOF (`persistence.aof`, background batched flush, `aof_fsync` / `aof_io`). Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
+**v0.5.0** — early MVP with optional persistence and master/slave replication. Single-file RDB (`SAVE` / `dump.rdb`), protobuf AOF (`persistence.aof`), and PSYNC fullsync + stream (`--slaveof`). Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
 - C++17 toolchain (`g++`)
-- [Protocol Buffers](https://protobuf.dev/) (`protoc`, `libprotobuf`) — codec kept for future replication
+- [Protocol Buffers](https://protobuf.dev/) (`protoc`, `libprotobuf`) — AOF / replication `WalEntry` frames
 - Vendored [usearch](https://github.com/unum-cloud/usearch) under `third_party/usearch` (already in tree; refresh with `make usearch-fetch`)
 - Vendored [spdlog](https://github.com/gabime/spdlog) under `third_party/spdlog` (already in tree; refresh with `make spdlog-fetch`)
 
@@ -57,11 +57,12 @@ Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 ./bench/smoke/pipeline.sh  # c=1 pipeline smoke (Vemory only)
 ./bench/smoke/vector.sh    # VSET load + VGET + VDEL spot-check (redis-py)
 ./bench/smoke/vector_rdb.sh  # VSET → SAVE → dump.rdb → VGET (needs persistence.dir)
+AUTO_SLAVE=1 ./bench/smoke/repl.sh               # PSYNC fullsync + stream (master already up)
 python3 bench/pipeline_bench.py                  # c=1 SET/GET: Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95 (see bench/README.md)
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE frequency vs SET QPS
 python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
-python3 bench/repl_bench.py                              # replication SET/GET (sequential no-repl then synced slave)
+AUTO_SLAVE=1 python3 bench/repl_bench.py                 # replication SET/GET (sequential no-repl then synced slave)
 ```
 
 ### Latest pipeline result
@@ -198,4 +199,4 @@ Design notes by layer:
 | Replication / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
 | Embed index / vector sets | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
-Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/`), schema in `proto/VNode.proto` (codec for future replication).
+Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/` and `replication/`), schemas in `proto/` (`VNode.proto`, `WalEntry.proto`).

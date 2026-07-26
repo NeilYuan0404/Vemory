@@ -88,3 +88,17 @@ Wire: `PSYNC` → `ReplicationDispatcher` → `ReplicationMaster::OnPsync`.
 redis-cli -p 6379 SET hello world
 redis-cli -p 6380 GET hello
 ```
+
+Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh` (master must already be running). Demo: `demo/04_repl.py`.
+
+---
+
+## Limits
+
+| Limit | Behavior |
+|-------|----------|
+| No partial resync | `PSYNC` has no offset / replid; every reconnect is a fullsync |
+| No auto-reconnect | Slave `Fail` → `kError`; restart the process with `--slaveof` |
+| No replica-readonly | Slave still listens and accepts `SET` / `VSET` (can diverge) |
+| Backlog overflow | Waiters whose start offset is dropped are kicked (retry PSYNC) |
+| Slow replica | Synced output buffer > 32 MiB → kick; slave must fullsync again |

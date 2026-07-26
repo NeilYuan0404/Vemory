@@ -4,7 +4,7 @@ Requires a running server (`./bin/vemory` or `./bin/vemory <port>`).
 
 Default: `HOST=127.0.0.1`, `PORT=6379`.
 
-Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`repl_bench.py`](repl_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
+Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`, `repl.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`repl_bench.py`](repl_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
 
 Semantic-cache vector benches use **Python + redis-py** (raw float32 blobs). Prefer `bench/.venv` after `pip install -r bench/requirements.txt`.
 
@@ -99,6 +99,24 @@ CARD=16 DIM=8 PORT=8989 ./bench/smoke/vector_rdb.sh
 | `THRESHOLD` | `0.2` | Cosine **distance** gate for `VGET` |
 | `DUMP_DIR` | `<repo>/data` | Must match server `persistence.dir` |
 | `SAVE_TIMEOUT_S` | `10` | Max wait for dump files after `SAVE` |
+
+## Smoke — Replication (`smoke/repl.sh`)
+
+Master must already be running. Script `SET`s on master and polls `GET` on slave (fullsync catch-up + a second write for live stream). With `AUTO_SLAVE=1`, starts `bin/vemory --slaveof …` and stops it on exit.
+
+```bash
+./bin/vemory 6379
+AUTO_SLAVE=1 ./bench/smoke/repl.sh
+PORT=8989 SLAVE_PORT=8992 AUTO_SLAVE=1 ./bench/smoke/repl.sh
+```
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `HOST` / `PORT` | `127.0.0.1` / `6379` | Master |
+| `SLAVE_HOST` / `SLAVE_PORT` | `127.0.0.1` / `6380` | Slave listen port |
+| `AUTO_SLAVE` | `0` | `1` starts/stops the slave process |
+| `SYNC_TIMEOUT_S` | `30` | Max wait for sync / stream |
+| `VEMORY_BIN` | `<repo>/bin/vemory` | Binary for `AUTO_SLAVE` |
 
 ## Pipeline compare (`pipeline_bench.py`)
 

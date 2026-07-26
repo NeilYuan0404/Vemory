@@ -61,6 +61,7 @@ python3 bench/pipeline_bench.py                  # c=1 SET/GET：Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95（见 bench/README.md）
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE 频率 vs SET QPS
 python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
+python3 bench/repl_bench.py                              # 主从同步 SET/GET（串行：无从 → 已同步从）
 ```
 
 ### 最近一次 pipeline 结果
@@ -131,6 +132,20 @@ ECHO（vemory_no_aof）：**13989.93** rps
 | redis_aof | 9984.03 | 12083.13 |
 
 仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。两侧 AOF 均为 everysec 刷盘。上表为 `aof_io=thread`（生产路径）。`aof_io=iouring` 目前只是试验功能，**不建议实际使用**（有 liburing 时 `auto` 也可能选中它）。
+
+### 最近一次主从同步 QPS
+
+运行：`AUTO_SLAVE=1 python3 bench/repl_bench.py`  
+（release `bin/vemory` `-O2 -DNDEBUG`；`c=1 P=1`，`N=100000`；同一 master `:8989` 上串行——先无从，再挂已同步从 `:8992`）
+
+ECHO（vemory_no_repl）：**13698.63** rps
+
+| mode | SET (rps) | GET (rps) |
+|------|----------:|----------:|
+| vemory_no_repl | 13294.34 | 12980.27 |
+| vemory_repl | 9903.93 | 13140.60 |
+
+仅供参考——单线程事件循环；从库已同步后，写路径会编码并在主线程 `Send` 给从。两阶段串行，避免无从/有从两套拓扑同时抢 CPU。
 
 其他目标：
 

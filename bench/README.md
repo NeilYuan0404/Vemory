@@ -4,7 +4,7 @@ Requires a running server (`./bin/vemory` or `./bin/vemory <port>`).
 
 Default: `HOST=127.0.0.1`, `PORT=6379`.
 
-Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
+Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`repl_bench.py`](repl_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py).
 
 Semantic-cache vector benches use **Python + redis-py** (raw float32 blobs). Prefer `bench/.venv` after `pip install -r bench/requirements.txt`.
 
@@ -159,6 +159,41 @@ Fair compare: Vemory AOF uses `aof_fsync=everysec` ([`conf/vemory_aof_bench.ini`
 | `R` / `D` | `10000` / `64` | Keyspace / SET value size (`-r` / `-d`) |
 | `ECHO_MSG` | `hello` | ECHO payload |
 
+## Replication QPS compare (`repl_bench.py`)
+
+**Sequential** **ECHO + SET/GET** via `redis-benchmark --csv`, fixed **`c=1 P=1`** (same params as [`aof_bench.py`](aof_bench.py)). One master only — no concurrent no-repl / with-repl topologies (avoids CPU contention).
+
+1. Require master up and **slave port down**
+2. ECHO + SET/GET → `vemory_no_repl`
+3. Wait for a synced replica (`SET` probe on master, poll `GET` on slave)
+4. SET/GET on the **same** master → `vemory_repl`
+
+Does **not** start/stop the master. After the no-repl phase, either start the slave yourself, or set `AUTO_SLAVE=1` to spawn it (and tear it down at the end).
+
+```bash
+# Terminal A — master only
+./bin/vemory 8989
+
+# Terminal B — after no-repl numbers print (or use AUTO_SLAVE=1)
+./bin/vemory --slaveof 127.0.0.1 8989 8992
+
+python3 bench/repl_bench.py
+AUTO_SLAVE=1 python3 bench/repl_bench.py
+N=10000 VEMORY_PORT=8989 SLAVE_PORT=8992 python3 bench/repl_bench.py
+```
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `VEMORY_HOST` / `VEMORY_PORT` | `127.0.0.1` / `8989` | Single master (both phases) |
+| `SLAVE_HOST` / `SLAVE_PORT` | `127.0.0.1` / `8992` | Replica (attached after no-repl) |
+| `N` | `100000` | Requests per test |
+| `R` / `D` | `10000` / `64` | Keyspace / SET value size (`-r` / `-d`) |
+| `ECHO_MSG` | `hello` | ECHO payload |
+| `SYNC_TIMEOUT_S` | `60` | Max wait for replica after no-repl phase |
+| `SYNC_POLL_S` | `0.05` | Poll interval while waiting for sync |
+| `AUTO_SLAVE` | `0` | `1` = spawn/stop slave between phases |
+| `VEMORY_BIN` | `<repo>/bin/vemory` | Binary used when `AUTO_SLAVE=1` |
+
 ## Vector metrics (`vector_metrics.py`)
 
 Industry-style metrics on a running server, **single Redis connection**:
@@ -292,6 +327,20 @@ ECHO (vemory_no_aof): **13989.93** rps
 | redis_aof | 9984.03 | 12083.13 |
 
 Numbers use `aof_io=thread`. `aof_io=iouring` is experimental only — not recommended for real use.
+
+### Replication QPS (`repl_bench.py`)
+
+Run: `AUTO_SLAVE=1 python3 bench/repl_bench.py`  
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; sequential on one master `:8989` — no-repl first, then synced slave `:8992`)
+
+ECHO (vemory_no_repl): **13698.63** rps
+
+| mode | SET (rps) | GET (rps) |
+|------|----------:|----------:|
+| vemory_no_repl | 13294.34 | 12980.27 |
+| vemory_repl | 9903.93 | 13140.60 |
+
+Sequential phases on one master; with a synced replica, SET pays main-thread stream push.
 
 ## Notes
 

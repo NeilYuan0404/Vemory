@@ -61,6 +61,7 @@ python3 bench/pipeline_bench.py                  # c=1 SET/GET: Vemory vs Redis
 bench/.venv/bin/python bench/vector_metrics.py   # agree / p50·p99 / QPS@agree≥0.95 (see bench/README.md)
 HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py  # SAVE frequency vs SET QPS
 python3 bench/aof_bench.py                               # AOF SET/GET vs Redis
+python3 bench/repl_bench.py                              # replication SET/GET (sequential no-repl then synced slave)
 ```
 
 ### Latest pipeline result
@@ -131,6 +132,20 @@ ECHO (vemory_no_aof): **13989.93** rps
 | redis_aof | 9984.03 | 12083.13 |
 
 Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync. Numbers above use `aof_io=thread` (the production path). `aof_io=iouring` exists for experimentation only and is **not recommended** for real use yet (`auto` may pick it when liburing is available).
+
+### Latest replication QPS
+
+Run: `AUTO_SLAVE=1 python3 bench/repl_bench.py`  
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; sequential on one master `:8989` — no-repl first, then synced slave `:8992`)
+
+ECHO (vemory_no_repl): **13698.63** rps
+
+| mode | SET (rps) | GET (rps) |
+|------|----------:|----------:|
+| vemory_no_repl | 13294.34 | 12980.27 |
+| vemory_repl | 9903.93 | 13140.60 |
+
+Indicative only — single-threaded event loop; with a synced replica, writes encode + main-thread `Send` to the slave. Sequential phases avoid concurrent topologies contending for CPU.
 
 Other targets:
 

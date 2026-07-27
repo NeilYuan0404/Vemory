@@ -10,21 +10,20 @@ RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP cl
 
 - C++17 toolchain (`g++`)
 - [Protocol Buffers](https://protobuf.dev/) (`protoc`, `libprotobuf`) — AOF / replication `WalEntry` frames
-- [gperftools](https://github.com/gperftools/gperftools) `libtcmalloc_minimal` — global heap for Vemory (STL / protobuf / `new`); Debian/Ubuntu: `apt install libgoogle-perftools-dev`. Vendored usearch still uses its own `mmap` arenas (not managed by tcmalloc). Disable with `TCMALLOC=0` if the library is unavailable.
+- Vendored [gperftools](https://github.com/gperftools/gperftools) under `third_party/gperftools` — default global heap (`libtcmalloc_minimal`, static-linked on `make`); refresh with `make gperftools-fetch`. Usearch still uses its own `mmap` arenas. Disable with `TCMALLOC=0`.
 - Vendored [usearch](https://github.com/unum-cloud/usearch) under `third_party/usearch` (already in tree; refresh with `make usearch-fetch`)
 - Vendored [spdlog](https://github.com/gabime/spdlog) under `third_party/spdlog` (already in tree; refresh with `make spdlog-fetch`)
 
 ## Build & run
 
 ```bash
-make              # → bin/vemory (links tcmalloc_minimal by default)
+make              # → bin/vemory (builds vendored tcmalloc if needed, then links it)
 make TCMALLOC=0   # system allocator instead of tcmalloc
 ./bin/vemory      # listen 0.0.0.0:6379 (master)
 ./bin/vemory 8989 # custom port
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI port overrides server.port
-./bin/vemory --slaveof 127.0.0.1 6379 6380  # replica: PSYNC fullsync + stream
-ldd bin/vemory | grep tcmalloc   # optional: confirm linkage
+./bin/vemory --slaveof 127.0.0.1 6379 6380  # replica: PSYNC fullsync + stream (client writes → READONLY)
 ```
 
 ```bash
@@ -171,6 +170,8 @@ Other targets:
 | `make run` | Build and start `bin/vemory` |
 | `make test` | GoogleTest unit suite (`bin/unit_tests`) |
 | `make proto` | Regenerate `generated/VNode.pb.*` |
+| `make gperftools-fetch` | Re-vendor gperftools source into `third_party/gperftools` |
+| `make gperftools-clean` | Remove gperftools build/`prefix` (source kept) |
 | `make compile-commands` | Refresh `compile_commands.json` for clangd |
 | `make clean` | Remove `build/`, `bin/`, `generated/` |
 

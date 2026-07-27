@@ -41,23 +41,22 @@ PROTOBUF_LIBS := -lprotobuf
 endif
 LDFLAGS  := $(PROTOBUF_LIBS)
 
-# Global heap via gperftools tcmalloc_minimal (STL/protobuf/new). usearch mmap is unchanged.
-# Default on; disable with TCMALLOC=0. Debian/Ubuntu: apt install libgoogle-perftools-dev
-# Skip the hard requirement for goals that do not link (e.g. clean, proto, *-fetch).
+# Global heap via vendored gperftools tcmalloc_minimal (STL/protobuf/new).
+# Source under third_party/gperftools (make gperftools-fetch); built into prefix/ on demand.
+# usearch mmap is unchanged. Disable with TCMALLOC=0.
+GPERFTOOLS_TAG    := gperftools-2.15
+GPERFTOOLS_URL    := https://github.com/gperftools/gperftools/releases/download/$(GPERFTOOLS_TAG)/$(GPERFTOOLS_TAG).tar.gz
+GPERFTOOLS_ROOT   := third_party/gperftools
+GPERFTOOLS_PREFIX := $(GPERFTOOLS_ROOT)/prefix
+GPERFTOOLS_LIB    := $(GPERFTOOLS_PREFIX)/lib/libtcmalloc_minimal.a
+GPERFTOOLS_CONF   := $(GPERFTOOLS_ROOT)/configure
+
 TCMALLOC ?= 1
-TCMALLOC_SKIP_GOALS := clean proto usearch-fetch spdlog-fetch gtest-fetch compile-commands
-TCMALLOC_NEED_LIB := $(if $(filter $(TCMALLOC_SKIP_GOALS),$(MAKECMDGOALS)),0,1)
+TCMALLOC_DEP :=
 ifeq ($(TCMALLOC),1)
-  TCMALLOC_LIBS := $(shell pkg-config --libs libtcmalloc_minimal 2>/dev/null)
-  ifeq ($(TCMALLOC_LIBS),)
-    TCMALLOC_LIBS := -ltcmalloc_minimal
-  endif
-  ifeq ($(TCMALLOC_NEED_LIB),1)
-    TCMALLOC_OK := $(shell echo 'int main(){return 0;}' | $(CXX) -x c++ -o /dev/null - $(TCMALLOC_LIBS) 2>/dev/null && echo yes)
-    ifneq ($(TCMALLOC_OK),yes)
-      $(error libtcmalloc_minimal not found. Install gperftools (e.g. apt install libgoogle-perftools-dev), export PKG_CONFIG_PATH if installed under ~/.local, or build with TCMALLOC=0)
-    endif
-  endif
+  # Static .a + whole-archive so malloc/new overrides are pulled in.
+  TCMALLOC_LIBS := -Wl,--whole-archive $(abspath $(GPERFTOOLS_LIB)) -Wl,--no-whole-archive -pthread
+  TCMALLOC_DEP := $(GPERFTOOLS_LIB)
   LDFLAGS += $(TCMALLOC_LIBS)
 endif
 
@@ -107,7 +106,9 @@ UNIT_SRCS := $(wildcard tests/unit/*.cc)
 UNIT_OBJS := $(UNIT_SRCS:tests/unit/%.cc=build/unit/%.o)
 UNIT_BIN  := bin/unit_tests
 
-.PHONY: all clean run test debug release testcase gtest-fetch usearch-fetch spdlog-fetch compile-commands proto
+.PHONY: all clean run test debug release testcase gtest-fetch usearch-fetch \
+        spdlog-fetch gperftools-fetch gperftools-build gperftools-clean \
+        compile-commands proto
 
 ifeq ($(MODE),test)
 all: $(TEST_BIN)
@@ -151,6 +152,40 @@ spdlog-fetch:
 	rm -rf $(SPDLOG_ROOT).tmp
 	@echo "Vendored spdlog $(SPDLOG_TAG) into $(SPDLOG_ROOT)"
 
+# Vendor gperftools source into third_party/gperftools (tracked in tree).
+gperftools-fetch:
+	@mkdir -p third_party
+	rm -rf $(GPERFTOOLS_ROOT).tmp $(GPERFTOOLS_ROOT).tgz
+	curl -fsSL -o $(GPERFTOOLS_ROOT).tgz $(GPERFTOOLS_URL)
+	mkdir -p $(GPERFTOOLS_ROOT).tmp
+	tar -xzf $(GPERFTOOLS_ROOT).tgz -C $(GPERFTOOLS_ROOT).tmp --strip-components=1
+	rm -rf $(GPERFTOOLS_ROOT)
+	mv $(GPERFTOOLS_ROOT).tmp $(GPERFTOOLS_ROOT)
+	rm -f $(GPERFTOOLS_ROOT).tgz
+	echo $(GPERFTOOLS_TAG) > $(GPERFTOOLS_ROOT)/VERSION
+	@echo "Vendored $(GPERFTOOLS_TAG) into $(GPERFTOOLS_ROOT)"
+
+# Out-of-tree build → static libtcmalloc_minimal.a under prefix/.
+gperftools-build: $(GPERFTOOLS_LIB)
+
+$(GPERFTOOLS_CONF):
+	@if [ ! -f $(GPERFTOOLS_CONF) ]; then \
+	  $(MAKE) gperftools-fetch; \
+	fi
+
+$(GPERFTOOLS_LIB): $(GPERFTOOLS_CONF)
+	@mkdir -p $(GPERFTOOLS_ROOT)/.build $(GPERFTOOLS_PREFIX)
+	cd $(GPERFTOOLS_ROOT)/.build && \
+	  ../configure --prefix="$(abspath $(GPERFTOOLS_PREFIX))" \
+	    --enable-minimal --enable-static --disable-shared \
+	    --disable-debugalloc && \
+	  $(MAKE) -j$$(nproc 2>/dev/null || echo 2) && \
+	  $(MAKE) install
+	@test -f $(GPERFTOOLS_LIB) || (echo "error: missing $(GPERFTOOLS_LIB)" >&2; exit 1)
+
+gperftools-clean:
+	rm -rf $(GPERFTOOLS_ROOT)/.build $(GPERFTOOLS_PREFIX)
+
 proto: $(PROTO_GEN_CC) $(PROTO_GEN_H)
 
 $(PROTO_GEN_CC) $(PROTO_GEN_H): $(PROTO_SRC)
@@ -167,10 +202,10 @@ $(GTEST_DIR)/src/gtest-all.cc:
 
 gtest-fetch: $(GTEST_DIR)/src/gtest-all.cc
 
-$(MAIN_BIN): $(OBJ) $(MAIN_SRC) | bin
+$(MAIN_BIN): $(OBJ) $(MAIN_SRC) $(TCMALLOC_DEP) | bin
 	$(CXX) $(CXXFLAGS) $(OBJ) $(MAIN_SRC) -o $@ $(LDFLAGS)
 
-$(TEST_BIN): $(OBJ) $(TEST_SRC) | bin
+$(TEST_BIN): $(OBJ) $(TEST_SRC) $(TCMALLOC_DEP) | bin
 	$(CXX) $(CXXFLAGS) $(OBJ) $(TEST_SRC) -o $@ $(LDFLAGS)
 
 $(BUILD_ROOT)/%.o: src/%.cc $(PROTO_GEN_H) $(USEARCH_HEADER) $(SPDLOG_HEADER)
@@ -197,7 +232,7 @@ build/unit/%.o: tests/unit/%.cc $(PROTO_GEN_H) $(USEARCH_HEADER) $(SPDLOG_HEADER
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(GTEST_INC) -pthread -c $< -o $@
 
-$(UNIT_BIN): $(UNIT_OBJS) $(OBJ) $(GTEST_OBJ) | bin
+$(UNIT_BIN): $(UNIT_OBJS) $(OBJ) $(GTEST_OBJ) $(TCMALLOC_DEP) | bin
 	$(CXX) $(CXXFLAGS) $(UNIT_OBJS) $(OBJ) $(GTEST_OBJ) -o $@ -pthread $(LDFLAGS)
 
 test: $(UNIT_BIN)

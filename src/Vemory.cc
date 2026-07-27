@@ -186,7 +186,7 @@ int main(int argc, char** argv) {
   }
 
   CommandHandler commands(&vnode_index, &kv, &snapshot, &wal,
-                          repl_master.get());
+                          repl_master.get(), cfg.slaveof);
   auto protocol = std::make_shared<RespProtocolHandler>();
 
   server.Start(cfg.bind, cfg.port,
@@ -226,8 +226,9 @@ int main(int argc, char** argv) {
                     cfg.slaveof_host, cfg.slaveof_port);
       return EXIT_FAILURE;
     }
-    spdlog::info("Vemory slaveof {}:{} listening on {}:{}", cfg.slaveof_host,
-                 cfg.slaveof_port, cfg.bind, cfg.port);
+    spdlog::info(
+        "Vemory slaveof {}:{} listening on {}:{} (replica-readonly)",
+        cfg.slaveof_host, cfg.slaveof_port, cfg.bind, cfg.port);
   } else {
     spdlog::info("Vemory master listening on {}:{} (RESP; try: redis-cli -p {})",
                  cfg.bind, cfg.port, cfg.port);

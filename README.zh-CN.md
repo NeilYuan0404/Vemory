@@ -10,21 +10,20 @@
 
 - C++17 工具链（`g++`）
 - [Protocol Buffers](https://protobuf.dev/)（`protoc`、`libprotobuf`）——AOF / 复制 `WalEntry` 帧
-- [gperftools](https://github.com/gperftools/gperftools) `libtcmalloc_minimal`——Vemory 全局堆（STL / protobuf / `new`）；Debian/Ubuntu：`apt install libgoogle-perftools-dev`。内置 usearch 仍使用自有 `mmap` arena（不由 tcmalloc 管理）。无该库时可 `TCMALLOC=0` 关闭。
+- 已内置 [gperftools](https://github.com/gperftools/gperftools)，位于 `third_party/gperftools`——默认全局堆（`libtcmalloc_minimal`，`make` 时静态链接）；可用 `make gperftools-fetch` 刷新。usearch 仍使用自有 `mmap` arena。`TCMALLOC=0` 可关闭。
 - 已内置 [usearch](https://github.com/unum-cloud/usearch)，位于 `third_party/usearch`（可用 `make usearch-fetch` 刷新）
 - 已内置 [spdlog](https://github.com/gabime/spdlog)，位于 `third_party/spdlog`（可用 `make spdlog-fetch` 刷新）
 
 ## 构建与运行
 
 ```bash
-make              # → bin/vemory（默认链接 tcmalloc_minimal）
+make              # → bin/vemory（如需会先编译内置 tcmalloc，再链接）
 make TCMALLOC=0   # 使用系统分配器，不链接 tcmalloc
 ./bin/vemory      # 监听 0.0.0.0:6379（master）
 ./bin/vemory 8989 # 自定义端口
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI 端口会覆盖 server.port
-./bin/vemory --slaveof 127.0.0.1 6379 6380  # 从机：PSYNC 全量 + 增量直推
-ldd bin/vemory | grep tcmalloc   # 可选：确认已链接 tcmalloc
+./bin/vemory --slaveof 127.0.0.1 6379 6380  # 从机：PSYNC 全量 + 增量（客户端写命令 → READONLY）
 ```
 
 ```bash
@@ -171,6 +170,8 @@ ECHO（vemory_no_repl）：**13698.63** rps
 | `make run` | 构建并启动 `bin/vemory` |
 | `make test` | GoogleTest 单元测试（`bin/unit_tests`） |
 | `make proto` | 重新生成 `generated/VNode.pb.*` |
+| `make gperftools-fetch` | 重新拉取 gperftools 源码到 `third_party/gperftools` |
+| `make gperftools-clean` | 删除 gperftools 的 build/`prefix`（保留源码） |
 | `make compile-commands` | 刷新 `compile_commands.json`（供 clangd） |
 | `make clean` | 删除 `build/`、`bin/`、`generated/` |
 

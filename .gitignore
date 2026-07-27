@@ -6,6 +6,11 @@
 *.so
 .cache/
 /third_party/googletest/
+# gperftools build/install artifacts (source under third_party/gperftools is tracked)
+/third_party/gperftools/prefix/
+/third_party/gperftools/.build/
+/third_party/gperftools.tmp/
+/third_party/gperftools.tgz
 /bench/data/*.hdf5
 /bench/data/*.hdf5.partial
 /bench/.venv/

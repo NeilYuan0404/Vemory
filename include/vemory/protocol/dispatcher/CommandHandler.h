@@ -17,7 +17,8 @@ class CommandHandler {
   CommandHandler(VNodeIndex* vnode_index, KvStore* kv,
                  SnapshotManager* snapshot = nullptr,
                  WalManager* wal = nullptr,
-                 ReplicationMaster* repl = nullptr);
+                 ReplicationMaster* repl = nullptr,
+                 bool replica_readonly = false);
 
   // Fills *reply with a RESP-encoded response string.
   void Dispatch(const RequestContext& ctx, std::string* reply);
@@ -28,6 +29,7 @@ class CommandHandler {
   SnapshotManager* snapshot_;
   WalManager* wal_;
   ReplicationMaster* repl_;
+  bool replica_readonly_ = false;
   KvsDispatchArg kvs_arg_{};
   VNodeDispatchArg vnode_arg_{};
   HandlerRegister register_;

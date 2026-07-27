@@ -1,19 +1,39 @@
 #include "vemory/protocol/dispatcher/CommandHandler.h"
 
+#include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/dispatcher/AssistDispatcher.h"
 #include "vemory/protocol/dispatcher/KvsDispatcher.h"
 #include "vemory/protocol/dispatcher/PersistDispatcher.h"
 #include "vemory/protocol/dispatcher/ReplicationDispatcher.h"
 #include "vemory/protocol/dispatcher/VNodeDispatcher.h"
+#include "vemory/protocol/resp/RespEncode.h"
+
+namespace {
+
+bool IsReplicaWriteCommand(CommandType cmd) {
+  switch (cmd) {
+    case CommandType::kSet:
+    case CommandType::kDel:
+    case CommandType::kVset:
+    case CommandType::kVdel:
+    case CommandType::kSave:
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
 
 CommandHandler::CommandHandler(VNodeIndex* vnode_index, KvStore* kv,
                                SnapshotManager* snapshot, WalManager* wal,
-                               ReplicationMaster* repl)
+                               ReplicationMaster* repl, bool replica_readonly)
     : vnode_index_(vnode_index),
       kv_(kv),
       snapshot_(snapshot),
       wal_(wal),
-      repl_(repl) {
+      repl_(repl),
+      replica_readonly_(replica_readonly) {
   kvs_arg_.kv = kv_;
   kvs_arg_.wal = wal_;
   kvs_arg_.repl = repl_;
@@ -46,5 +66,10 @@ void CommandHandler::Dispatch(const RequestContext& ctx, std::string* reply) {
     return;
   }
   reply->clear();
+  if (replica_readonly_ && IsReplicaWriteCommand(ctx.cmd)) {
+    RespEncode::AppendError(
+        reply, "READONLY You can't write against a read only replica.");
+    return;
+  }
   register_.Dispatch(ctx, reply);
 }

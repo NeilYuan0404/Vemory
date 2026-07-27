@@ -2,6 +2,15 @@
 
 All notable changes to Vemory are documented in this file.
 
+## [Unreleased]
+
+### Added
+- Replica-readonly: `--slaveof` rejects client `SET`/`DEL`/`VSET`/`VDEL`/`SAVE` with `-READONLY …` (replication stream apply unchanged)
+- Vendored gperftools (`third_party/gperftools`, `make gperftools-fetch`); default build static-links `libtcmalloc_minimal` with no system package required
+
+### Changed
+- tcmalloc no longer requires `apt install libgoogle-perftools-dev` / `PKG_CONFIG_PATH` for out-of-the-box `make`
+
 ## [0.5.1] — 2026-07-27
 
 Default process heap via gperftools tcmalloc (build-time), plus an RSS/VIRT compare bench.
@@ -42,7 +51,6 @@ PSYNC master/slave replication (fullsync + stream) and single-file RDB v2.
 ### Limits
 - No PSYNC partial resync / replication offset / replid — disconnect always needs a new fullsync
 - Slave does not auto-reconnect after link failure (enters error state; restart with `--slaveof`)
-- Slave still accepts client writes (no forced replica-readonly)
 - No AOF rewrite after SAVE (unchanged from 0.4.x)
 
 ## [0.4.1] — 2026-07-25

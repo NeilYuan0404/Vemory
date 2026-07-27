@@ -11,7 +11,7 @@ Master/slave replication: temporary RDB fullsync under `tmp/`, in-memory backlog
 | Master (default) | no `--slaveof` | Accepts `PSYNC`, fullsync via `tmp/repl-fullsync.rdb` + backlog, then streams writes |
 | Slave | `--slaveof <host> <port>` | `PSYNC`, load `tmp/repl-in.rdb`, apply backlog, then stream apply |
 
-Slave still listens on its local port for clients.
+Slave still listens on its local port for clients; client writes are rejected (`-READONLY`).
 
 ---
 
@@ -99,6 +99,6 @@ Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh` (master must already be running). De
 |-------|----------|
 | No partial resync | `PSYNC` has no offset / replid; every reconnect is a fullsync |
 | No auto-reconnect | Slave `Fail` → `kError`; restart the process with `--slaveof` |
-| No replica-readonly | Slave still listens and accepts `SET` / `VSET` (can diverge) |
+| Replica-readonly | `--slaveof` rejects client writes (`SET`/`DEL`/`VSET`/`VDEL`/`SAVE`) with `-READONLY …`; replication stream apply is unchanged |
 | Backlog overflow | Waiters whose start offset is dropped are kicked (retry PSYNC) |
 | Slow replica | Synced output buffer > 32 MiB → kick; slave must fullsync again |

@@ -364,12 +364,11 @@ Sequential phases on one master; with a synced replica, SET pays main-thread str
 
 RSS/VIRT compare with **tcmalloc on vs off** (string `SET` insert, then `DEL` clear — no `VSET`, so usearch mmap is out of the picture). Self-starts two private servers; samples `/proc/<pid>/status`.
 
-Needs: Linux/WSL, `redis-py` (`bench/.venv`, uses RESP2 `protocol=2`), and gperftools `libtcmalloc_minimal` when building the on side (`TCMALLOC=1`).
+Needs: Linux/WSL, `redis-py` (`bench/.venv`, uses RESP2 `protocol=2`). `BUILD=1` uses the vendored gperftools under `third_party/gperftools` for the on side (`TCMALLOC=1`).
 
 ```bash
 # default: BUILD=1 makes bin/vemory.tcmalloc + bin/vemory.sys, then runs N=300000 D=64
-PKG_CONFIG_PATH=$HOME/.local/lib/pkgconfig LD_LIBRARY_PATH=$HOME/.local/lib \
-  bench/.venv/bin/python bench/tcmalloc_mem_bench.py
+bench/.venv/bin/python bench/tcmalloc_mem_bench.py
 
 N=100000 D=64 BUILD=0 \
   BIN_TCMALLOC=bin/vemory.tcmalloc BIN_SYS=bin/vemory.sys \

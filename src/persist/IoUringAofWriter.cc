@@ -18,7 +18,7 @@
 #include <thread>
 #include <utility>
 
-#include "vemory/util/BlockingQueue.h"
+#include "vemory/util/ringbuffer.h"
 
 namespace {
 
@@ -46,7 +46,7 @@ class IoUringAofWriter final : public AofWriter {
       return false;
     }
     IncPending();
-    if (!queue_.Push(std::move(frame))) {
+    if (!queue_.PushWait(std::move(frame))) {
       DecPending();
       return false;
     }
@@ -101,12 +101,20 @@ class IoUringAofWriter final : public AofWriter {
  private:
   static constexpr std::size_t kQueueCapacity = 1024;
   static constexpr std::size_t kMaxBatch = 32;
+  static constexpr std::size_t kMaxInFlight = 8;
   static constexpr unsigned kRingEntries = 32;
+
+  struct PendingOp {
+    std::string frames[kMaxBatch];
+    struct iovec iov[kMaxBatch];
+    std::size_t n = 0;
+    std::size_t total = 0;
+    bool in_use = false;
+  };
 
   IoUringAofWriter(std::string path, vemory::AofFsyncPolicy fsync)
       : path_(std::move(path)),
         fsync_(fsync),
-        queue_(kQueueCapacity),
         last_fsync_(std::chrono::steady_clock::now()) {}
 
   bool Init() {
@@ -156,6 +164,30 @@ class IoUringAofWriter final : public AofWriter {
     }
   }
 
+  PendingOp* AcquireOp() {
+    for (std::size_t i = 0; i < kMaxInFlight; ++i) {
+      if (!ops_[i].in_use) {
+        ops_[i].in_use = true;
+        ops_[i].n = 0;
+        ops_[i].total = 0;
+        return &ops_[i];
+      }
+    }
+    return nullptr;
+  }
+
+  void ReleaseOp(PendingOp* op) {
+    if (op == nullptr) {
+      return;
+    }
+    for (std::size_t i = 0; i < op->n; ++i) {
+      op->frames[i].clear();
+    }
+    op->n = 0;
+    op->total = 0;
+    op->in_use = false;
+  }
+
   bool SyncFile() {
     if (fsync_ == vemory::AofFsyncPolicy::kNo) {
       return true;
@@ -177,123 +209,210 @@ class IoUringAofWriter final : public AofWriter {
     return true;
   }
 
-  // Keep frame buffers alive until CQE returns (batch[] in FlushLoop).
-  bool WriteBatchUring(const std::string* frames, std::size_t n) {
-    if (frames == nullptr || n == 0 || fd_ < 0 || !ring_inited_) {
-      return false;
-    }
-
-    struct iovec iov[kMaxBatch];
-    std::size_t total = 0;
-    for (std::size_t i = 0; i < n; ++i) {
-      if (frames[i].empty()) {
-        return false;
-      }
-      iov[i].iov_base = const_cast<char*>(frames[i].data());
-      iov[i].iov_len = frames[i].size();
-      total += frames[i].size();
-    }
-
-    struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
-    if (sqe == nullptr) {
-      return false;
-    }
-    io_uring_prep_writev(sqe, fd_, iov, static_cast<unsigned>(n), 0);
-    io_uring_sqe_set_data(sqe, nullptr);
-    if (io_uring_submit_and_wait(&ring_, 1) < 0) {
-      return false;
-    }
-    struct io_uring_cqe* cqe = nullptr;
-    if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
-      return false;
-    }
-    const int res = cqe->res;
-    io_uring_cqe_seen(&ring_, cqe);
-    if (res < 0 || static_cast<std::size_t>(res) != total) {
-      return false;
-    }
-    dirty_ = true;
-    return true;
-  }
-
-  void MaybeSyncAfterBatch() {
-    if (fsync_ == vemory::AofFsyncPolicy::kAlways) {
-      if (!SyncFile()) {
-        spdlog::error("AOF fsync failed path={}", path_);
-        io_failed_.store(true, std::memory_order_relaxed);
-      }
-      return;
-    }
-    if (fsync_ != vemory::AofFsyncPolicy::kEverySec) {
-      return;
-    }
-    const auto now = std::chrono::steady_clock::now();
-    if (now - last_fsync_ < std::chrono::seconds(1)) {
-      return;
-    }
-    if (!SyncFile()) {
-      spdlog::error("AOF fsync failed path={}", path_);
-      io_failed_.store(true, std::memory_order_relaxed);
-    }
-  }
-
-  void FlushLoop() {
-    std::string batch[kMaxBatch];
+  // Non-blocking CQE reclaim. Returns false on IO/fsync failure.
+  bool ReclaimCompletions() {
     while (true) {
-      const bool got = queue_.PopWaitFor(&batch[0], std::chrono::seconds(1));
-      if (!got) {
-        if (queue_.cancelled()) {
-          break;
-        }
-        if (fsync_ == vemory::AofFsyncPolicy::kEverySec) {
-          std::lock_guard<std::mutex> lock(file_mu_);
-          if (!io_failed_.load(std::memory_order_relaxed)) {
-            if (!SyncFile()) {
-              spdlog::error("AOF fsync failed path={}", path_);
-              io_failed_.store(true, std::memory_order_relaxed);
-              queue_.Cancel();
-            }
-          }
-        }
-        continue;
+      struct io_uring_cqe* cqe = nullptr;
+      if (io_uring_peek_cqe(&ring_, &cqe) != 0 || cqe == nullptr) {
+        break;
+      }
+      auto* op = static_cast<PendingOp*>(io_uring_cqe_get_data(cqe));
+      const int res = cqe->res;
+      io_uring_cqe_seen(&ring_, cqe);
+      if (in_flight_ > 0) {
+        --in_flight_;
       }
 
-      std::size_t n = 1;
-      while (n < kMaxBatch &&
-             queue_.PopWaitFor(&batch[n], std::chrono::milliseconds(0))) {
-        ++n;
-      }
-
-      if (io_failed_.load(std::memory_order_relaxed)) {
-        DecPendingN(n);
-        continue;
+      if (op == nullptr || res < 0 ||
+          static_cast<std::size_t>(res) != op->total) {
+        spdlog::error("AOF io_uring write failed path={} res={}", path_, res);
+        if (op != nullptr) {
+          DecPendingN(op->n);
+          ReleaseOp(op);
+        }
+        return false;
       }
 
       {
         std::lock_guard<std::mutex> lock(file_mu_);
-        if (!WriteBatchUring(batch, n)) {
-          spdlog::error("AOF io_uring write failed path={}", path_);
-          io_failed_.store(true, std::memory_order_relaxed);
-          DecPendingN(n);
-          queue_.Cancel();
-          std::string frame;
-          while (queue_.Pop(&frame)) {
-            DecPending();
-          }
-          return;
-        }
-        MaybeSyncAfterBatch();
-        if (io_failed_.load(std::memory_order_relaxed)) {
-          DecPendingN(n);
-          queue_.Cancel();
-          std::string frame;
-          while (queue_.Pop(&frame)) {
-            DecPending();
-          }
-          return;
+        dirty_ = true;
+      }
+      DecPendingN(op->n);
+      ReleaseOp(op);
+
+      if (fsync_ == vemory::AofFsyncPolicy::kAlways) {
+        std::lock_guard<std::mutex> lock(file_mu_);
+        if (!SyncFile()) {
+          spdlog::error("AOF fsync failed path={}", path_);
+          return false;
         }
       }
-      DecPendingN(n);
+    }
+
+    if (fsync_ == vemory::AofFsyncPolicy::kEverySec) {
+      std::lock_guard<std::mutex> lock(file_mu_);
+      const auto now = std::chrono::steady_clock::now();
+      if (dirty_ && now - last_fsync_ >= std::chrono::seconds(1)) {
+        if (!SyncFile()) {
+          spdlog::error("AOF fsync failed path={}", path_);
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  bool WaitOneCqe() {
+    struct io_uring_cqe* cqe = nullptr;
+    if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
+      spdlog::error("AOF io_uring wait_cqe failed path={}", path_);
+      return false;
+    }
+    // Leave CQE for ReclaimCompletions (peek + seen).
+    return true;
+  }
+
+  void DrainInFlight() {
+    while (in_flight_ > 0) {
+      struct io_uring_cqe* cqe = nullptr;
+      if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
+        break;
+      }
+      auto* op = static_cast<PendingOp*>(io_uring_cqe_get_data(cqe));
+      io_uring_cqe_seen(&ring_, cqe);
+      --in_flight_;
+      if (op != nullptr) {
+        DecPendingN(op->n);
+        ReleaseOp(op);
+      }
+    }
+  }
+
+  void FailAndDrain() {
+    io_failed_.store(true, std::memory_order_relaxed);
+    queue_.Cancel();
+    DrainInFlight();
+    std::string frame;
+    while (queue_.Pop(frame)) {
+      DecPending();
+    }
+  }
+
+  bool SubmitOp(PendingOp* op) {
+    if (op == nullptr || op->n == 0 || fd_ < 0 || !ring_inited_) {
+      return false;
+    }
+    op->total = 0;
+    for (std::size_t i = 0; i < op->n; ++i) {
+      if (op->frames[i].empty()) {
+        return false;
+      }
+      op->iov[i].iov_base = const_cast<char*>(op->frames[i].data());
+      op->iov[i].iov_len = op->frames[i].size();
+      op->total += op->frames[i].size();
+    }
+
+    struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
+    while (sqe == nullptr) {
+      if (!ReclaimCompletions()) {
+        return false;
+      }
+      sqe = io_uring_get_sqe(&ring_);
+      if (sqe != nullptr) {
+        break;
+      }
+      if (in_flight_ == 0) {
+        return false;
+      }
+      if (!WaitOneCqe()) {
+        return false;
+      }
+    }
+
+    io_uring_prep_writev(sqe, fd_, op->iov, static_cast<unsigned>(op->n), 0);
+    io_uring_sqe_set_data(sqe, op);
+    if (io_uring_submit(&ring_) < 0) {
+      return false;
+    }
+    ++in_flight_;
+    return true;
+  }
+
+  void FlushLoop() {
+    while (true) {
+      if (!ReclaimCompletions()) {
+        FailAndDrain();
+        return;
+      }
+      if (io_failed_.load(std::memory_order_relaxed)) {
+        FailAndDrain();
+        return;
+      }
+
+      PendingOp* op = AcquireOp();
+      if (op == nullptr) {
+        if (in_flight_ == 0) {
+          // Should be unreachable (all ops free when none in flight).
+          std::this_thread::yield();
+          continue;
+        }
+        if (!WaitOneCqe()) {
+          FailAndDrain();
+          return;
+        }
+        continue;
+      }
+
+      // Keep reclaiming while work is outstanding; long wait only when idle.
+      const bool got =
+          in_flight_ > 0
+              ? queue_.PopWaitFor(&op->frames[0], std::chrono::milliseconds(0))
+              : queue_.PopWaitFor(&op->frames[0], std::chrono::seconds(1));
+
+      if (!got) {
+        ReleaseOp(op);
+        if (queue_.cancelled() && queue_.Size() == 0 && in_flight_ == 0) {
+          break;
+        }
+        if (in_flight_ > 0) {
+          if (!WaitOneCqe()) {
+            FailAndDrain();
+            return;
+          }
+          continue;
+        }
+        // Idle timeout: everysec sync of dirty tail.
+        if (!queue_.cancelled() &&
+            fsync_ == vemory::AofFsyncPolicy::kEverySec) {
+          std::lock_guard<std::mutex> lock(file_mu_);
+          if (!SyncFile()) {
+            spdlog::error("AOF fsync failed path={}", path_);
+            FailAndDrain();
+            return;
+          }
+        }
+        continue;
+      }
+
+      op->n = 1;
+      while (op->n < kMaxBatch &&
+             queue_.PopWaitFor(&op->frames[op->n],
+                               std::chrono::milliseconds(0))) {
+        ++op->n;
+      }
+
+      if (!SubmitOp(op)) {
+        spdlog::error("AOF io_uring submit failed path={}", path_);
+        DecPendingN(op->n);
+        ReleaseOp(op);
+        FailAndDrain();
+        return;
+      }
+    }
+
+    // Shutdown: reclaim any stragglers (should already be idle after Flush).
+    if (!ReclaimCompletions()) {
+      FailAndDrain();
     }
   }
 
@@ -303,7 +422,10 @@ class IoUringAofWriter final : public AofWriter {
   struct io_uring ring_{};
   bool ring_inited_ = false;
 
-  BlockingQueue<std::string> queue_;
+  RingBuffer<std::string, kQueueCapacity> queue_;
+  PendingOp ops_[kMaxInFlight];
+  std::size_t in_flight_ = 0;
+
   std::thread thread_;
   std::atomic<bool> io_failed_{false};
   std::atomic<bool> stopped_{false};

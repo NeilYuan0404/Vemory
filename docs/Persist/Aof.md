@@ -28,7 +28,7 @@ Empty `dir` disables AOF even if `aof=true`.
 |-------|----------|
 | `auto` | Try io_uring (needs `liburing` + capable kernel); on failure use `thread` |
 | `thread` | Bounded queue + flush thread + batched `fwrite` / one `fflush` per batch (**recommended**) |
-| `iouring` | Same queue model; flush thread batches frames into one `io_uring` `writev` (fallback to `thread` + warn if unavailable). **Experimental — not recommended for real use yet.** |
+| `iouring` | SPSC `RingBuffer` + flush thread; batches frames into pipelined `io_uring` `writev` (`submit` + `peek_cqe`, up to 8 in-flight); fallback to `thread` + warn if unavailable. **Experimental — not recommended for real use yet.** |
 
 Both backends honor `aof_fsync`. Replay is always synchronous `fopen` read (not via io_uring).
 
@@ -88,9 +88,15 @@ DEL/VDEL miss (`integer_reply == 0`) does not append.
 | `WalManager` | `include/vemory/persist/WalManager.h` |
 | `AofWriter` | `include/vemory/persist/AofWriter.h` (`ThreadAofWriter` / `IoUringAofWriter`) |
 | `ApplyMutation` | `include/vemory/mutate/MutationApply.h`（共享突变层，非 AOF writer） |
-| `BlockingQueue` | `include/vemory/util/BlockingQueue.h` |
+| `BlockingQueue` | `include/vemory/util/BlockingQueue.h` (`thread` backend) |
+| `RingBuffer` | `include/vemory/util/ringbuffer.h` (`iouring` backend; lock-free data + CV wake) |
 
-`Append` serializes on the caller thread and enqueues a complete frame via `AofWriter` (capacity 1024; full → block). The writer’s flush thread pops (1s timed wait), non-blocking-drains up to 32 frames, writes one batch (`fwrite`+`fflush` or `io_uring` `writev`), then applies `aof_fsync`. `Flush()` waits until pending frames are written and then `fdatasync` when policy ≠ `no`.
+`Append` serializes on the caller thread and enqueues a complete frame via `AofWriter` (capacity 1024; full → block).
+
+- **thread**: flush thread `PopWaitFor` (1s), drains up to 32 frames, one `fwrite`+`fflush`, then `aof_fsync`.
+- **iouring**: flush thread pops from SPSC `RingBuffer`, `prep_writev` + `io_uring_submit` (frames kept alive in a PendingOp until CQE), non-blocking `io_uring_peek_cqe` reclaim (multiple batches in flight), then `aof_fsync` (`always` per completed batch; `everysec` on a timer / idle wake).
+
+`Flush()` waits until pending frames have completed writes (CQE for iouring) and then `fdatasync` when policy ≠ `no`.
 
 ---
 

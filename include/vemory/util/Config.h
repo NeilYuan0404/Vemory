@@ -19,7 +19,7 @@ enum class AofFsyncPolicy : uint8_t {
 enum class AofIoMode : uint8_t {
   kAuto = 0,     // try io_uring, else thread (experimental path via auto)
   kThread = 1,   // BlockingQueue + fwrite flush thread (default / recommended)
-  kIoUring = 2,  // BlockingQueue + io_uring flush thread (experimental; fallback on fail)
+  kIoUring = 2,  // RingBuffer + pipelined io_uring writev (experimental; fallback on fail)
 };
 
 // Runtime settings loaded from an INI file (or left at built-in defaults).

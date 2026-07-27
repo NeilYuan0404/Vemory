@@ -29,7 +29,7 @@ Empty `dir` disables AOF even if `aof=true`.
 | Value | Behavior |
 |-------|----------|
 | `auto` | Try io_uring (needs `liburing` + capable kernel); on failure use `thread` |
-| `thread` | Bounded queue + flush thread + batched `fwrite` / one `fflush` per batch (**recommended**) |
+| `thread` | SPSC `RingBuffer` + flush thread + batched `fwrite` / one `fflush` per batch (**recommended**) |
 | `iouring` | SPSC `RingBuffer` + flush thread; pipelined `io_uring` `writev` (`submit` + `peek_cqe`); fallback to `thread` + warn if unavailable. **Experimental.** |
 
 Both backends honor `aof_fsync`. Replay is always synchronous file read + RESP decode.
@@ -85,8 +85,7 @@ DEL/VDEL miss (`integer_reply == 0`) does not append.
 | `AofWriter` | `include/vemory/persist/AofWriter.h` (`ThreadAofWriter` / `IoUringAofWriter`) |
 | `ApplyMutation` | `include/vemory/mutate/MutationApply.h` |
 | `RespEncode::EncodeWriteCommand` | `include/vemory/protocol/resp/RespEncode.h` |
-| `BlockingQueue` | `include/vemory/util/BlockingQueue.h` (`thread` backend) |
-| `RingBuffer` | `include/vemory/util/ringbuffer.h` (`iouring` backend) |
+| `RingBuffer` | `include/vemory/util/ringbuffer.h` (both `thread` and `iouring` backends; bounded SPSC + `PushWait` backpressure) |
 
 `ApplyMutation` (client) encodes one RESP frame, then enqueues to AOF and feeds the replication backlog. Flush thread pops batches and writes; `Flush()` waits until pending frames complete writes and then `fdatasync` when policy ≠ `no`.
 

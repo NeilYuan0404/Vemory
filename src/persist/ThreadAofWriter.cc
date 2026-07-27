@@ -18,7 +18,6 @@ bool WriteExact(FILE* fp, const void* buf, std::size_t n) {
 ThreadAofWriter::ThreadAofWriter(std::string path, vemory::AofFsyncPolicy fsync)
     : path_(std::move(path)),
       fsync_(fsync),
-      queue_(kQueueCapacity),
       last_fsync_(std::chrono::steady_clock::now()) {
   thread_ = std::thread([this] { FlushLoop(); });
 }
@@ -167,7 +166,7 @@ void ThreadAofWriter::FlushLoop() {
         DecPendingN(n);
         queue_.Cancel();
         std::string frame;
-        while (queue_.Pop(&frame)) {
+        while (queue_.Pop(frame)) {
           DecPending();
         }
         return;
@@ -178,7 +177,7 @@ void ThreadAofWriter::FlushLoop() {
         DecPendingN(n);
         queue_.Cancel();
         std::string frame;
-        while (queue_.Pop(&frame)) {
+        while (queue_.Pop(frame)) {
           DecPending();
         }
         return;
@@ -188,7 +187,7 @@ void ThreadAofWriter::FlushLoop() {
         DecPendingN(n);
         queue_.Cancel();
         std::string frame;
-        while (queue_.Pop(&frame)) {
+        while (queue_.Pop(frame)) {
           DecPending();
         }
         return;
@@ -204,7 +203,7 @@ bool ThreadAofWriter::Enqueue(std::string frame) {
     return false;
   }
   IncPending();
-  if (!queue_.Push(std::move(frame))) {
+  if (!queue_.PushWait(std::move(frame))) {
     DecPending();
     return false;
   }

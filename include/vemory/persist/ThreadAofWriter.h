@@ -9,10 +9,10 @@
 #include <thread>
 
 #include "vemory/persist/AofWriter.h"
-#include "vemory/util/BlockingQueue.h"
 #include "vemory/util/Config.h"
+#include "vemory/util/ringbuffer.h"
 
-// Classic AOF flush: BlockingQueue + background thread + batched fwrite/fflush/fdatasync.
+// Classic AOF flush: SPSC RingBuffer + background thread + batched fwrite/fflush/fdatasync.
 class ThreadAofWriter final : public AofWriter {
  public:
   ThreadAofWriter(std::string path, vemory::AofFsyncPolicy fsync);
@@ -46,7 +46,7 @@ class ThreadAofWriter final : public AofWriter {
   vemory::AofFsyncPolicy fsync_;
   FILE* fp_ = nullptr;
 
-  BlockingQueue<std::string> queue_;
+  RingBuffer<std::string, kQueueCapacity> queue_;
   std::thread thread_;
   std::atomic<bool> io_failed_{false};
   std::atomic<bool> stopped_{false};

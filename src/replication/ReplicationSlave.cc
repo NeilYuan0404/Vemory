@@ -30,10 +30,106 @@ ReplicationSlave::ReplicationSlave(EventLoop* loop, SnapshotManager* snapshot,
       vnode_index_(vnode_index),
       kv_(kv) {}
 
+ReplicationSlave::~ReplicationSlave() {
+  stopping_ = true;
+  CancelReconnectTimer();
+  ResetLink();
+}
+
+uint64_t ReplicationSlave::NextBackoffMs(uint64_t current_ms) {
+  if (current_ms >= kMaxBackoffMs) {
+    return kMaxBackoffMs;
+  }
+  const uint64_t next = current_ms * 2;
+  return next > kMaxBackoffMs ? kMaxBackoffMs : next;
+}
+
 bool ReplicationSlave::EnsureTmpDir() {
   std::error_code ec;
   std::filesystem::create_directories(kTmpDir, ec);
   return !ec;
+}
+
+void ReplicationSlave::CancelReconnectTimer() {
+  if (reconnect_timer_ != nullptr) {
+    Timer::GetInstance()->DelTimeout(reconnect_timer_);
+    reconnect_timer_ = nullptr;
+  }
+}
+
+void ReplicationSlave::ResetLink() {
+  CancelReconnectTimer();
+
+  closing_ = true;
+  if (conn_) {
+    conn_->SetReadCallback({});
+    conn_->SetCloseCallback({});
+    if (!conn_->closed()) {
+      conn_->ForceClose();
+    }
+    conn_.reset();
+  }
+  closing_ = false;
+
+  if (rdb_fp_ != nullptr) {
+    std::fclose(rdb_fp_);
+    rdb_fp_ = nullptr;
+  }
+  backlog_buf_.clear();
+  stream_buf_.clear();
+  rdb_remaining_ = -1;
+  backlog_remaining_ = -1;
+  state_ = State::kInit;
+}
+
+void ReplicationSlave::ScheduleReconnect(const std::string& reason) {
+  if (stopping_) {
+    return;
+  }
+  CancelReconnectTimer();
+  const uint64_t delay = backoff_ms_;
+  backoff_ms_ = NextBackoffMs(backoff_ms_);
+  state_ = State::kError;
+  spdlog::warn("slave: {}; reconnect in {}ms to {}:{}", reason, delay,
+               master_host_, master_port_);
+  reconnect_timer_ = Timer::GetInstance()->AddTimeout(delay, [this]() {
+    reconnect_timer_ = nullptr;
+    TryConnect();
+  });
+}
+
+void ReplicationSlave::TryConnect() {
+  if (stopping_ || loop_ == nullptr || snapshot_ == nullptr) {
+    return;
+  }
+  ResetLink();
+
+  const int fd = TcpConnector::Connect(master_host_, master_port_);
+  if (fd < 0) {
+    spdlog::error("slave: connect {}:{} failed", master_host_, master_port_);
+    ScheduleReconnect("connect failed");
+    return;
+  }
+
+  conn_ = std::make_shared<TcpConn>(fd, *loop_);
+  state_ = State::kWaitFullresync;
+
+  const char psync[] = "*1\r\n$5\r\nPSYNC\r\n";
+  conn_->Send(psync, sizeof(psync) - 1);
+  conn_->SetReadCallback([this]() { OnReadable(); });
+  conn_->SetCloseCallback([this]() {
+    if (closing_ || stopping_) {
+      return;
+    }
+    Fail("connection closed");
+  });
+
+  spdlog::info("slave: sent PSYNC to {}:{}", master_host_, master_port_);
+}
+
+void ReplicationSlave::EnterStreaming() {
+  state_ = State::kStreaming;
+  backoff_ms_ = kMinBackoffMs;
 }
 
 bool ReplicationSlave::Start(const std::string& host, uint16_t port) {
@@ -44,36 +140,40 @@ bool ReplicationSlave::Start(const std::string& host, uint16_t port) {
     spdlog::error("slave: cannot create {}", kTmpDir);
     return false;
   }
-
-  const int fd = TcpConnector::Connect(host, port);
-  if (fd < 0) {
-    spdlog::error("slave: connect {}:{} failed", host, port);
+  if (host.empty() || port == 0) {
+    spdlog::error("slave: invalid master address");
     return false;
   }
 
-  conn_ = std::make_shared<TcpConn>(fd, *loop_);
-  state_ = State::kWaitFullresync;
-
-  const char psync[] = "*1\r\n$5\r\nPSYNC\r\n";
-  conn_->Send(psync, sizeof(psync) - 1);
-  conn_->SetReadCallback([this]() { OnReadable(); });
-  conn_->SetCloseCallback([this]() {
-    if (state_ != State::kError) {
-      Fail("connection closed");
-    }
-  });
-
-  spdlog::info("slave: sent PSYNC to {}:{}", host, port);
+  master_host_ = host;
+  master_port_ = port;
+  backoff_ms_ = kMinBackoffMs;
+  TryConnect();
   return true;
 }
 
 void ReplicationSlave::Fail(const std::string& msg) {
-  state_ = State::kError;
+  if (stopping_ || state_ == State::kError) {
+    return;
+  }
   spdlog::error("slave: {}", msg);
+  state_ = State::kError;
   if (rdb_fp_ != nullptr) {
     std::fclose(rdb_fp_);
     rdb_fp_ = nullptr;
   }
+  // Keep conn_ alive so callers can still touch InputBuffer after Fail returns;
+  // TryConnect/ResetLink drops it on the next attempt.
+  closing_ = true;
+  if (conn_) {
+    conn_->SetReadCallback({});
+    conn_->SetCloseCallback({});
+    if (!conn_->closed()) {
+      conn_->ForceClose();
+    }
+  }
+  closing_ = false;
+  ScheduleReconnect(msg);
 }
 
 bool ReplicationSlave::ConsumeSimpleString(std::string* out) {
@@ -310,7 +410,7 @@ void ReplicationSlave::OnReadable() {
       backlog_buf_.reserve(static_cast<std::size_t>(len));
       state_ = State::kRecvBacklogBody;
       if (backlog_remaining_ == 0) {
-        state_ = State::kStreaming;
+        EnterStreaming();
         spdlog::info("slave: fullsync done (empty backlog); streaming");
         continue;
       }
@@ -334,7 +434,7 @@ void ReplicationSlave::OnReadable() {
           return;
         }
         backlog_buf_.clear();
-        state_ = State::kStreaming;
+        EnterStreaming();
         spdlog::info("slave: fullsync done; streaming");
         continue;
       }

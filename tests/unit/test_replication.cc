@@ -110,6 +110,14 @@ TEST(ReplicationBacklog, FeedEncodedRoundTrip) {
   EXPECT_EQ(out, frame);
 }
 
+TEST(ReplicationSlave, NextBackoffMs) {
+  EXPECT_EQ(ReplicationSlave::NextBackoffMs(1000), 2000u);
+  EXPECT_EQ(ReplicationSlave::NextBackoffMs(2000), 4000u);
+  EXPECT_EQ(ReplicationSlave::NextBackoffMs(32000), 60000u);
+  EXPECT_EQ(ReplicationSlave::NextBackoffMs(60000), 60000u);
+  EXPECT_EQ(ReplicationSlave::NextBackoffMs(60001), 60000u);
+}
+
 TEST(ReplicationSlave, ConsumeStreamFrames_PartialAndMulti) {
   VNodeIndex idx(16);
   KvStore kv;

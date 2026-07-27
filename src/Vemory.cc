@@ -222,12 +222,13 @@ int main(int argc, char** argv) {
     repl_slave = std::make_unique<ReplicationSlave>(&evloop, &snapshot,
                                                     &vnode_index, &kv);
     if (!repl_slave->Start(cfg.slaveof_host, cfg.slaveof_port)) {
-      spdlog::error("Failed to start replication slave of {}:{}",
+      spdlog::error("Failed to start replication slave of {}:{} (fatal setup)",
                     cfg.slaveof_host, cfg.slaveof_port);
       return EXIT_FAILURE;
     }
     spdlog::info(
-        "Vemory slaveof {}:{} listening on {}:{} (replica-readonly)",
+        "Vemory slaveof {}:{} listening on {}:{} (replica-readonly; "
+        "auto-reconnect on link failure)",
         cfg.slaveof_host, cfg.slaveof_port, cfg.bind, cfg.port);
   } else {
     spdlog::info("Vemory master listening on {}:{} (RESP; try: redis-cli -p {})",

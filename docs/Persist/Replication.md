@@ -89,7 +89,7 @@ redis-cli -p 6379 SET hello world
 redis-cli -p 6380 GET hello
 ```
 
-Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh` (master must already be running). Demo: `demo/04_repl.py`.
+Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh` (master must already be running); reconnect: `./bench/smoke/repl_reconnect.sh`. Demo: `demo/04_repl.py`.
 
 ---
 
@@ -98,7 +98,7 @@ Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh` (master must already be running). De
 | Limit | Behavior |
 |-------|----------|
 | No partial resync | `PSYNC` has no offset / replid; every reconnect is a fullsync |
-| No auto-reconnect | Slave `Fail` → `kError`; restart the process with `--slaveof` |
+| Auto-reconnect | Slave link failure → exponential backoff (1s→2s→…→60s) → re-`Connect` + `PSYNC` fullsync; process stays up |
 | Replica-readonly | `--slaveof` rejects client writes (`SET`/`DEL`/`VSET`/`VDEL`/`SAVE`) with `-READONLY …`; replication stream apply is unchanged |
 | Backlog overflow | Waiters whose start offset is dropped are kicked (retry PSYNC) |
 | Slow replica | Synced output buffer > 32 MiB → kick; slave must fullsync again |

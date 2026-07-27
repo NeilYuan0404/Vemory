@@ -4,8 +4,14 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-07-27
+
+Slave auto-reconnect, replica-readonly writes, and vendored gperftools for out-of-the-box tcmalloc.
+
 ### Added
 - Replica-readonly: `--slaveof` rejects client `SET`/`DEL`/`VSET`/`VDEL`/`SAVE` with `-READONLY …` (replication stream apply unchanged)
+- Slave auto-reconnect: link/`PSYNC` failure schedules exponential backoff (1s→60s) and fullsyncs again; initial master connect failure no longer exits the process
+- Smoke: [`bench/smoke/repl_reconnect.sh`](bench/smoke/repl_reconnect.sh)
 - Vendored gperftools (`third_party/gperftools`, `make gperftools-fetch`); default build static-links `libtcmalloc_minimal` with no system package required
 
 ### Changed
@@ -50,7 +56,6 @@ PSYNC master/slave replication (fullsync + stream) and single-file RDB v2.
 
 ### Limits
 - No PSYNC partial resync / replication offset / replid — disconnect always needs a new fullsync
-- Slave does not auto-reconnect after link failure (enters error state; restart with `--slaveof`)
 - No AOF rewrite after SAVE (unchanged from 0.4.x)
 
 ## [0.4.1] — 2026-07-25

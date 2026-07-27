@@ -20,4 +20,6 @@ jobs:
             protobuf-compiler libprotobuf-dev
 
       - name: Unit tests
-        run: make test -j"$(nproc)"
+        run: |
+          make gtest-fetch
+          make test -j"$(nproc)"

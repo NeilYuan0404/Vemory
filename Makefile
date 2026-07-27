@@ -200,7 +200,12 @@ $(GTEST_DIR)/src/gtest-all.cc:
 	@mkdir -p third_party
 	git clone --depth 1 --branch $(GTEST_TAG) $(GTEST_REPO) $(GTEST_ROOT)
 
-gtest-fetch: $(GTEST_DIR)/src/gtest-all.cc
+# Same clone as gtest-all.cc; declare the dep so parallel `make -j` does not
+# race looking for gtest_main.cc before the clone finishes.
+$(GTEST_DIR)/src/gtest_main.cc: $(GTEST_DIR)/src/gtest-all.cc
+	@test -f $@
+
+gtest-fetch: $(GTEST_DIR)/src/gtest-all.cc $(GTEST_DIR)/src/gtest_main.cc
 
 $(MAIN_BIN): $(OBJ) $(MAIN_SRC) $(TCMALLOC_DEP) | bin
 	$(CXX) $(CXXFLAGS) $(OBJ) $(MAIN_SRC) -o $@ $(LDFLAGS)
@@ -224,11 +229,11 @@ build/gtest/gtest-all.o: $(GTEST_DIR)/src/gtest-all.cc
 	@mkdir -p $(dir $@)
 	$(CXX) -std=c++17 -g -I $(GTEST_DIR)/include -I $(GTEST_DIR) -pthread -c $< -o $@
 
-build/gtest/gtest_main.o: $(GTEST_DIR)/src/gtest_main.cc | $(GTEST_DIR)/src/gtest-all.cc
+build/gtest/gtest_main.o: $(GTEST_DIR)/src/gtest_main.cc
 	@mkdir -p $(dir $@)
 	$(CXX) -std=c++17 -g -I $(GTEST_DIR)/include -I $(GTEST_DIR) -pthread -c $< -o $@
 
-build/unit/%.o: tests/unit/%.cc $(PROTO_GEN_H) $(USEARCH_HEADER) $(SPDLOG_HEADER) | $(GTEST_DIR)/src/gtest-all.cc
+build/unit/%.o: tests/unit/%.cc $(PROTO_GEN_H) $(USEARCH_HEADER) $(SPDLOG_HEADER) $(GTEST_DIR)/src/gtest-all.cc
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(GTEST_INC) -pthread -c $< -o $@
 

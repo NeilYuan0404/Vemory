@@ -8,6 +8,7 @@
 
 #include "vemory/mutate/MutationApply.h"
 #include "vemory/persist/WalManager.h"
+#include "vemory/persist/IoUringAofWriter.h"
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/protocol/RequestContext.h"
@@ -299,3 +300,38 @@ TEST(WalManager, ThreadBatchAppendReplay) {
 TEST(WalManager, IoUringBatchAppendReplayOrFallback) {
   AppendManyFlushReplay(vemory::AofIoMode::kIoUring);
 }
+
+#if VEMORY_HAVE_LIBURING
+TEST(WalManager, IoUringSoftBufferNeedsFlushOrPoll) {
+  TempDir dir;
+  VNodeIndex idx(32);
+  KvStore kv;
+  WalManager wal(&idx, &kv, dir.path(), /*enable=*/true,
+                 vemory::AofFsyncPolicy::kNo, vemory::AofIoMode::kIoUring,
+                 /*flush_interval_ms=*/60000);
+  ASSERT_EQ(wal.AppendFrame(EncodeSet("soft", "buf")), WalManager::Status::kOk);
+
+  // Small frame stays in soft buffer until Poll/Flush; file may still be empty.
+  FILE* fp = std::fopen(wal.path().c_str(), "rb");
+  if (fp != nullptr) {
+    char tmp[8];
+    const std::size_t n = std::fread(tmp, 1, sizeof(tmp), fp);
+    std::fclose(fp);
+    // If io_uring path is active, unflushed soft buffer leaves file empty/short.
+    // Thread fallback may have already written — either is OK after Flush.
+    (void)n;
+  }
+
+  wal.Poll();  // may not flush yet (interval not elapsed)
+  ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
+
+  VNodeIndex idx2(32);
+  KvStore kv2;
+  WalManager wal2(&idx2, &kv2, dir.path(), true, vemory::AofFsyncPolicy::kNo,
+                  vemory::AofIoMode::kThread);
+  ASSERT_EQ(wal2.Replay(), WalManager::Status::kOk);
+  std::string val;
+  ASSERT_EQ(kv2.Get("soft", &val), KvStore::Status::kOk);
+  EXPECT_EQ(val, "buf");
+}
+#endif

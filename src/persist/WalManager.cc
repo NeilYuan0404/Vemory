@@ -11,7 +11,7 @@
 
 WalManager::WalManager(VNodeIndex* vnode_index, KvStore* kv, std::string dir,
                        bool enable, vemory::AofFsyncPolicy fsync,
-                       vemory::AofIoMode io_mode)
+                       vemory::AofIoMode io_mode, int flush_interval_ms)
     : vnode_index_(vnode_index),
       kv_(kv),
       dir_(std::move(dir)),
@@ -20,7 +20,7 @@ WalManager::WalManager(VNodeIndex* vnode_index, KvStore* kv, std::string dir,
       io_mode_(io_mode) {
   if (enabled_) {
     path_ = dir_ + "/" + kFileName;
-    writer_ = MakeAofWriter(path_, fsync_, io_mode_);
+    writer_ = MakeAofWriter(path_, fsync_, io_mode_, flush_interval_ms);
   }
 }
 
@@ -45,6 +45,12 @@ WalManager::Status WalManager::AppendFrame(std::string frame) {
     return writer_->failed() ? Status::kIoError : Status::kError;
   }
   return Status::kOk;
+}
+
+void WalManager::Poll() {
+  if (writer_ != nullptr) {
+    writer_->Poll();
+  }
 }
 
 WalManager::Status WalManager::Flush() {

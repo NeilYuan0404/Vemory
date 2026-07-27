@@ -9,15 +9,17 @@
 
 std::unique_ptr<AofWriter> MakeAofWriter(std::string path,
                                         vemory::AofFsyncPolicy fsync,
-                                        vemory::AofIoMode mode) {
+                                        vemory::AofIoMode mode,
+                                        int flush_interval_ms) {
   if (mode == vemory::AofIoMode::kThread) {
     return std::make_unique<ThreadAofWriter>(std::move(path), fsync);
   }
 
   if (mode == vemory::AofIoMode::kAuto || mode == vemory::AofIoMode::kIoUring) {
-    auto uring = TryMakeIoUringAofWriter(path, fsync);
+    auto uring =
+        TryMakeIoUringAofWriter(path, fsync, flush_interval_ms);
     if (uring != nullptr) {
-      spdlog::info("AOF writer: io_uring path={}", path);
+      spdlog::info("AOF writer: inline io_uring path={}", path);
       return uring;
     }
     if (mode == vemory::AofIoMode::kIoUring) {

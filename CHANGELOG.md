@@ -5,6 +5,8 @@ All notable changes to Vemory are documented in this file.
 ## [Unreleased]
 
 ### Changed
+- AOF default `aof_io=auto`: same-thread growable buffer + inline io_uring on the reactor (`Poll` via EventLoop idle); `thread` remains the no-liburing fallback. New `aof_flush_interval_ms` (default 1000).
+- Replication: feed backlog only when `has_slaves()`; skip RESP encode when neither AOF nor slaves.
 - AOF / replication / RDB NODES: drop protobuf; use RESP write commands (vectors as bulk bytes). RDB version 3. Remove `protoc` / `libprotobuf` build dependency.
 - Docs/README polish: drop stale “future replication” / MVP wording; semantic-cache naming; CI workflow; README badges
 

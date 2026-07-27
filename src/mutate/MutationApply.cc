@@ -99,21 +99,24 @@ ApplyResult ApplyMutation(const RequestContext& ctx, MutateSource src,
       return out;
   }
 
-  if (src == MutateSource::kClient &&
-      ((wal != nullptr && wal->enabled()) || repl != nullptr)) {
-    std::string frame;
-    if (!RespEncode::EncodeWriteCommand(ctx, &frame)) {
-      out.err = "encode write command failed";
-      return out;
-    }
-    if (wal != nullptr && wal->enabled()) {
-      if (wal->AppendFrame(frame) != WalManager::Status::kOk) {
-        out.err = "aof append failed";
+  if (src == MutateSource::kClient) {
+    const bool wal_on = wal != nullptr && wal->enabled();
+    const bool repl_on = repl != nullptr && repl->has_slaves();
+    if (wal_on || repl_on) {
+      std::string frame;
+      if (!RespEncode::EncodeWriteCommand(ctx, &frame)) {
+        out.err = "encode write command failed";
         return out;
       }
-    }
-    if (repl != nullptr) {
-      repl->FeedEncodedFrame(frame);
+      if (wal_on) {
+        if (wal->AppendFrame(frame) != WalManager::Status::kOk) {
+          out.err = "aof append failed";
+          return out;
+        }
+      }
+      if (repl_on) {
+        repl->FeedEncodedFrame(frame);
+      }
     }
   }
 

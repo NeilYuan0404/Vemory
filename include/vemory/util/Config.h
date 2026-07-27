@@ -17,9 +17,9 @@ enum class AofFsyncPolicy : uint8_t {
 
 // AOF flush backend (persistence.aof_io).
 enum class AofIoMode : uint8_t {
-  kAuto = 0,     // try io_uring, else thread (experimental path via auto)
-  kThread = 1,   // BlockingQueue + fwrite flush thread (default / recommended)
-  kIoUring = 2,  // RingBuffer + pipelined io_uring writev (experimental; fallback on fail)
+  kAuto = 0,     // try inline io_uring, else thread
+  kThread = 1,   // BlockingQueue + fwrite flush thread
+  kIoUring = 2,  // inline io_uring on reactor (fallback to thread on fail)
 };
 
 // Runtime settings loaded from an INI file (or left at built-in defaults).
@@ -35,7 +35,8 @@ struct Config {
   // Append-only RESP write-command log under persistence_dir/appendonly.aof
   bool aof = false;
   AofFsyncPolicy aof_fsync = AofFsyncPolicy::kEverySec;
-  AofIoMode aof_io = AofIoMode::kThread;
+  AofIoMode aof_io = AofIoMode::kAuto;
+  int aof_flush_interval_ms = 1000;
 
   // CLI --slaveof only (not INI). When set, process acts as replica.
   bool slaveof = false;

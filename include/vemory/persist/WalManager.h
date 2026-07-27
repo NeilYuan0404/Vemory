@@ -23,7 +23,8 @@ class WalManager {
   // dir empty or enable=false → AppendFrame is no-op (kNotConfigured).
   WalManager(VNodeIndex* vnode_index, KvStore* kv, std::string dir, bool enable,
              vemory::AofFsyncPolicy fsync = vemory::AofFsyncPolicy::kEverySec,
-             vemory::AofIoMode io_mode = vemory::AofIoMode::kThread);
+             vemory::AofIoMode io_mode = vemory::AofIoMode::kAuto,
+             int flush_interval_ms = 1000);
   ~WalManager();
 
   WalManager(const WalManager&) = delete;
@@ -35,14 +36,15 @@ class WalManager {
   vemory::AofIoMode io_mode() const { return io_mode_; }
 
   // Enqueue one RESP write-command frame. Returns after enqueue (not durable).
-  // No-op if not enabled. Blocks if the writer queue is full (backpressure).
   Status AppendFrame(std::string frame);
 
   // Block until previously enqueued frames are written (+ fsync per policy).
   Status Flush();
 
+  // Reactor idle: peek completions / timed flush (inline io_uring).
+  void Poll();
+
   // Replay all complete RESP write commands (MutateSource::kAofReplay).
-  // Missing/empty file → kOk (start empty). Truncated tail ignored.
   Status Replay();
 
  private:
@@ -54,6 +56,6 @@ class WalManager {
   std::string path_;
   bool enabled_ = false;
   vemory::AofFsyncPolicy fsync_ = vemory::AofFsyncPolicy::kEverySec;
-  vemory::AofIoMode io_mode_ = vemory::AofIoMode::kThread;
+  vemory::AofIoMode io_mode_ = vemory::AofIoMode::kAuto;
   std::unique_ptr<AofWriter> writer_;
 };

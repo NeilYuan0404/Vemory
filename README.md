@@ -47,13 +47,14 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `index` | `default_capacity` | `1024` | Initial semantic-cache index capacity |
 | `persistence` | `dir` | `data` | RDB snapshot directory; empty disables `SAVE` |
 | `persistence` | `load_on_startup` | `false` | Load `dump.rdb` from `dir` on startup |
-| `persistence` | `aof` | `false` | Protobuf AOF at `dir/appendonly.aof` |
+| `persistence` | `aof` | `false` | RESP AOF at `dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always` (`fdatasync`) |
-| `persistence` | `aof_io` | `thread` | `auto` / `thread` / `iouring` (flush backend; prefer `thread` — `iouring` is experimental only) |
+| `persistence` | `aof_io` | `auto` | `auto` / `thread` / `iouring` (inline io_uring when available; else thread) |
+| `persistence` | `aof_flush_interval_ms` | `1000` | Soft flush interval for inline AOF buffer |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
 
-Snapshot file under `data/dump.rdb` by default (Header + TOC + KV/NODES/USEARCH). `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (encode on the request path, flush thread writes `appendonly.aof`; `aof_fsync` controls durability).
+Snapshot file under `data/dump.rdb` by default (Header + TOC + KV/NODES/USEARCH). `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (same-thread buffer + inline io_uring by default, or flush thread; `aof_fsync` controls durability).
 
 Benches (server must already be running; needs `redis-benchmark` / `redis-cli`):
 
@@ -138,7 +139,7 @@ ECHO (vemory_no_aof): **13989.93** rps
 | vemory_aof | 10582.01 | 12835.32 |
 | redis_aof | 9984.03 | 12083.13 |
 
-Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync. Numbers above use `aof_io=thread` (the production path). `aof_io=iouring` exists for experimentation only and is **not recommended** for real use yet (`auto` may pick it when liburing is available).
+Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync. Numbers above used `aof_io=thread`; default is now `auto` (inline io_uring when liburing is available).
 
 ### Latest replication QPS
 

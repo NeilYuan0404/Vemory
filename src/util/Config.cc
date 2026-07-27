@@ -197,6 +197,17 @@ bool ApplyKey(Config* cfg, const std::string& section, const std::string& key,
       }
       return false;
     }
+    if (key == "aof_flush_interval_ms") {
+      unsigned long long v = 0;
+      if (!ParseUint(value, &v) || v < 1 || v > 600000ull) {
+        if (error != nullptr) {
+          *error = "invalid persistence.aof_flush_interval_ms: " + value;
+        }
+        return false;
+      }
+      cfg->aof_flush_interval_ms = static_cast<int>(v);
+      return true;
+    }
   }
 
   cfg->warnings.push_back("unknown key " + section + "." + key);

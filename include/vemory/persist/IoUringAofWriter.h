@@ -10,6 +10,6 @@
 #include "vemory/persist/AofWriter.h"
 #include "vemory/util/Config.h"
 
-// Returns an IoUringAofWriter, or nullptr if unavailable / init failed.
-std::unique_ptr<AofWriter> TryMakeIoUringAofWriter(std::string path,
-                                                  vemory::AofFsyncPolicy fsync);
+// Inline (reactor-thread) io_uring AOF writer, or nullptr if unavailable.
+std::unique_ptr<AofWriter> TryMakeIoUringAofWriter(
+    std::string path, vemory::AofFsyncPolicy fsync, int flush_interval_ms = 1000);

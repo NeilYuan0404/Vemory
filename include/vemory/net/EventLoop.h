@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
-#include <memory>
+#include <utility>
 
 #include <spdlog/spdlog.h>
 
@@ -15,7 +15,6 @@
 
 inline constexpr int kMaxEvents = 1024;
 
-// epoll event mask (EPOLLIN / EPOLLOUT / …) and userdata callback type.
 using IoEvents = uint32_t;
 using IoHandler = std::function<void(IoEvents)>;
 
@@ -29,6 +28,8 @@ class EventLoop {
   }
 
   ~EventLoop() { close(epfd_); }
+
+  void SetIdleCallback(std::function<void()> cb) { idle_ = std::move(cb); }
 
   void AddEvent(int fd, IoEvents events, void* ptr) {
     epoll_event ev;
@@ -72,9 +73,13 @@ class EventLoop {
         (*handler)(events[i].events);
       }
       Timer::GetInstance()->HandleTimeout();
+      if (idle_) {
+        idle_();
+      }
     }
   }
 
  private:
   int epfd_;
+  std::function<void()> idle_;
 };

@@ -6,28 +6,30 @@
 
 #include "vemory/util/Config.h"
 
-// Background AOF writer: enqueue complete frames (u32le|payload), flush, stop.
-// Implementations own the queue + flush thread + file descriptor.
+// AOF writer: enqueue RESP frames, flush, stop.
+// Inline io_uring path runs on the reactor thread; thread path uses a queue.
 class AofWriter {
  public:
   virtual ~AofWriter() = default;
 
-  // Enqueue one frame. Blocks if the queue is full. Returns false if stopped
+  // Enqueue one frame. May block under backpressure. Returns false if stopped
   // or the writer has already failed.
   virtual bool Enqueue(std::string frame) = 0;
 
-  // Wait until previously enqueued frames are written; then fdatasync when
+  // Wait until buffered/pending frames are written; then fdatasync when
   // policy != no.
   virtual bool Flush() = 0;
 
-  // Cancel queue, join thread, close file.
+  // Cancel / join / close.
   virtual void Stop() = 0;
 
   virtual bool failed() const = 0;
+
+  // Reactor idle hook (inline io_uring: peek + timed flush). Default no-op.
+  virtual void Poll() {}
 };
 
-// Build a writer. For auto/iouring, falls back to ThreadAofWriter on failure
-// (missing liburing, kernel, or init error) and logs a warning.
-std::unique_ptr<AofWriter> MakeAofWriter(std::string path,
-                                        vemory::AofFsyncPolicy fsync,
-                                        vemory::AofIoMode mode);
+// Build a writer. For auto/iouring, falls back to ThreadAofWriter on failure.
+std::unique_ptr<AofWriter> MakeAofWriter(
+    std::string path, vemory::AofFsyncPolicy fsync, vemory::AofIoMode mode,
+    int flush_interval_ms = 1000);

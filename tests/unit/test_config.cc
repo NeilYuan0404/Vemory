@@ -50,7 +50,8 @@ TEST(Config, Defaults) {
   EXPECT_FALSE(cfg.load_on_startup);
   EXPECT_FALSE(cfg.aof);
   EXPECT_EQ(cfg.aof_fsync, vemory::AofFsyncPolicy::kEverySec);
-  EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kThread);
+  EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kAuto);
+  EXPECT_EQ(cfg.aof_flush_interval_ms, 1000);
 }
 
 TEST(Config, LoadHappyPath) {
@@ -218,6 +219,14 @@ TEST(Config, AofIoModes) {
     ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
     EXPECT_EQ(cfg.aof_io, vemory::AofIoMode::kAuto);
   }
+}
+
+TEST(Config, AofFlushIntervalMs) {
+  TempIni file("[persistence]\naof_flush_interval_ms = 250\n");
+  vemory::Config cfg;
+  std::string err;
+  ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+  EXPECT_EQ(cfg.aof_flush_interval_ms, 250);
 }
 
 TEST(Config, BadAofIo) {

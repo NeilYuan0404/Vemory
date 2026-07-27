@@ -47,13 +47,14 @@ redis-cli -p 8989
 | `index` | `default_capacity` | `1024` | 语义缓存索引初始容量 |
 | `persistence` | `dir` | `data` | RDB 快照目录；空则 `SAVE` 不可用 |
 | `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.rdb` |
-| `persistence` | `aof` | `false` | Protobuf AOF：`dir/appendonly.aof` |
+| `persistence` | `aof` | `false` | RESP AOF：`dir/appendonly.aof` |
 | `persistence` | `aof_fsync` | `everysec` | `no` / `everysec` / `always`（`fdatasync`） |
-| `persistence` | `aof_io` | `thread` | `auto` / `thread` / `iouring`（刷盘后端；生产请用 `thread`——`iouring` 仅为试验） |
+| `persistence` | `aof_io` | `auto` | `auto` / `thread` / `iouring`（有 liburing 时用同线程 inline io_uring，否则 thread） |
+| `persistence` | `aof_flush_interval_ms` | `1000` | inline AOF 缓冲软刷间隔（毫秒） |
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
 
-快照文件默认在 `data/dump.rdb`（Header + TOC + KV/NODES/USEARCH）。`SAVE` 为 fork 后台写盘。可选 AOF：开启 `persistence.aof`（请求路径编码，刷盘线程写 `appendonly.aof`；`aof_fsync` 控制耐久性）。
+快照文件默认在 `data/dump.rdb`（Header + TOC + KV/NODES/USEARCH）。`SAVE` 为 fork 后台写盘。可选 AOF：开启 `persistence.aof`（默认同线程缓冲 + inline io_uring，或刷盘线程；`aof_fsync` 控制耐久性）。
 
 压测（服务端需已启动；依赖 `redis-benchmark` / `redis-cli`）：
 
@@ -138,7 +139,7 @@ ECHO（vemory_no_aof）：**13989.93** rps
 | vemory_aof | 10582.01 | 12835.32 |
 | redis_aof | 9984.03 | 12083.13 |
 
-仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。两侧 AOF 均为 everysec 刷盘。上表为 `aof_io=thread`（生产路径）。`aof_io=iouring` 目前只是试验功能，**不建议实际使用**（有 liburing 时 `auto` 也可能选中它）。
+仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。两侧 AOF 均为 everysec 刷盘。上表为 `aof_io=thread`；默认现为 `auto`（有 liburing 时走 inline io_uring）。
 
 ### 最近一次主从同步 QPS
 

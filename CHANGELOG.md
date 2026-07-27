@@ -4,6 +4,11 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- PSYNC partial resync: `PSYNC <replid> <offset>` → `+CONTINUE` catch-up from backlog when offset retained; else `+FULLRESYNC <replid> <cut>`
+- Process-lifetime master `replid` (40 hex); replication backlog always fed on mutations
+- Smoke: [`bench/smoke/repl_reconnect_partial.sh`](bench/smoke/repl_reconnect_partial.sh)
+
 ## [0.5.2] — 2026-07-27
 
 Slave auto-reconnect, replica-readonly writes, and vendored gperftools for out-of-the-box tcmalloc.
@@ -55,7 +60,7 @@ PSYNC master/slave replication (fullsync + stream) and single-file RDB v2.
 - Old multi-file RDB layouts (`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch`) are no longer loaded; re-`SAVE` after upgrade to produce `dump.rdb`
 
 ### Limits
-- No PSYNC partial resync / replication offset / replid — disconnect always needs a new fullsync
+- Master restart issues a new `replid` (slaves must fullsync); backlog is process-local
 - No AOF rewrite after SAVE (unchanged from 0.4.x)
 
 ## [0.4.1] — 2026-07-25

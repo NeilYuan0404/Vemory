@@ -1,6 +1,8 @@
 # Persist Layer — Replication (PSYNC + stream)
 
-Master/slave replication: temporary RDB fullsync under `tmp/`, in-memory backlog for the sync window, then **main-thread direct push** of `WalEntry` frames to synced replicas (Redis-style). Independent of local RDB persistence (`persistence.dir` / `dump.rdb` / `SAVE`).
+Master/slave replication: temporary RDB fullsync under `tmp/`, in-memory backlog for catch-up, then **main-thread direct push** of `WalEntry` frames to synced replicas (Redis-style). Independent of local RDB persistence (`persistence.dir` / `dump.rdb` / `SAVE`).
+
+Partial resync: reconnecting slaves send `PSYNC <replid> <offset>`; if the offset is still in the backlog, master replies `+CONTINUE` and sends the gap as raw frames (no RDB).
 
 ---
 
@@ -8,8 +10,8 @@ Master/slave replication: temporary RDB fullsync under `tmp/`, in-memory backlog
 
 | Mode | How | Behavior |
 |------|-----|----------|
-| Master (default) | no `--slaveof` | Accepts `PSYNC`, fullsync via `tmp/repl-fullsync.rdb` + backlog, then streams writes |
-| Slave | `--slaveof <host> <port>` | `PSYNC`, load `tmp/repl-in.rdb`, apply backlog, then stream apply |
+| Master (default) | no `--slaveof` | Accepts `PSYNC`; fullsync or partial via backlog; streams writes |
+| Slave | `--slaveof <host> <port>` | `PSYNC`, load RDB or CONTINUE catch-up, then stream apply |
 
 Slave still listens on its local port for clients; client writes are rejected (`-READONLY`).
 
@@ -31,27 +33,39 @@ Slave still listens on its local port for clients; client writes are rejected (`
 Slave → master:
 
 ```text
-*1\r\n$5\r\nPSYNC\r\n
+*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n          # first sync / force fullsync
+*3\r\n$5\r\nPSYNC\r\n$40\r\n<replid>\r\n$…\r\n<offset>\r\n  # try partial
 ```
 
-Master → slave:
+(`PSYNC` with no args is still accepted and means fullsync.)
+
+Master → slave (fullsync):
 
 ```text
-+FULLRESYNC\r\n
++FULLRESYNC <replid> <cut_offset>\r\n
 $<rdb_nbytes>\r\n
 <rdb bytes>              # sendfile(tmp/repl-fullsync.rdb)
 $<backlog_nbytes>\r\n
-<backlog bytes>           # u32le + WalEntry frames (AOF-compatible)
-# then continuous bare frames (no RESP wrapper):
+<backlog bytes>           # u32le + WalEntry frames [cut, tip)
+# then continuous bare frames:
 <u32le len><WalEntry proto> ...
 ```
+
+Master → slave (partial):
+
+```text
++CONTINUE\r\n
+<u32le len><WalEntry proto> ...   # catch-up [offset, tip), then live stream
+```
+
+`replid` is a process-lifetime 40-hex id (new on master restart). Offset is a byte position in the encoded backlog stream.
 
 ---
 
 ## Backlog + direct push
 
 - Ring buffer (default 16 MiB) of encoded `WalEntry` frames
-- On successful client mutation: **encode once** → append backlog → `Send` to each `kSynced` slave (main thread)
+- On successful client mutation: **encode once** → always append backlog → `Send` to each `kSynced` slave (main thread)
 - Slaves still in fullsync (`kWaitRdb` / `kSending*`) only receive via the backlog bulk, not live `Send`
 - Fullsync start records `backlog_start_offset`; after RDB sendfile, master sends `[start, tip)` as the second RESP bulk
 - Overflow that drops a waiter’s start offset → that slave is dropped (retry PSYNC)
@@ -89,7 +103,7 @@ redis-cli -p 6379 SET hello world
 redis-cli -p 6380 GET hello
 ```
 
-Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh` (master must already be running); reconnect: `./bench/smoke/repl_reconnect.sh`. Demo: `demo/04_repl.py`.
+Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh`; reconnect fullsync: `./bench/smoke/repl_reconnect.sh`; partial: `./bench/smoke/repl_reconnect_partial.sh`. Demo: `demo/04_repl.py`.
 
 ---
 
@@ -97,8 +111,9 @@ Smoke: `AUTO_SLAVE=1 ./bench/smoke/repl.sh` (master must already be running); re
 
 | Limit | Behavior |
 |-------|----------|
-| No partial resync | `PSYNC` has no offset / replid; every reconnect is a fullsync |
-| Auto-reconnect | Slave link failure → exponential backoff (1s→2s→…→60s) → re-`Connect` + `PSYNC` fullsync; process stays up |
+| Partial resync | Matching `replid` + offset still in backlog → `+CONTINUE` catch-up; else / mismatch → `+FULLRESYNC` |
+| Auto-reconnect | Slave link failure → exponential backoff (1s→2s→…→60s) → re-`Connect` + `PSYNC` (with offset when known) |
 | Replica-readonly | `--slaveof` rejects client writes (`SET`/`DEL`/`VSET`/`VDEL`/`SAVE`) with `-READONLY …`; replication stream apply is unchanged |
-| Backlog overflow | Waiters whose start offset is dropped are kicked (retry PSYNC) |
-| Slow replica | Synced output buffer > 32 MiB → kick; slave must fullsync again |
+| Backlog overflow | Waiters whose start offset is dropped are kicked (retry PSYNC); reconnecting slave whose offset fell out → fullsync |
+| Slow replica | Synced output buffer > 32 MiB → kick; slave retries with offset or fullsync |
+| Master restart | New `replid` → slaves fullsync (offset alone is not trusted across processes) |

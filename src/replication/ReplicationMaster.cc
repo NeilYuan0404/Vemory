@@ -2,7 +2,9 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <random>
 #include <system_error>
+#include <string_view>
 
 #include <sys/stat.h>
 
@@ -10,12 +12,35 @@
 
 #include "vemory/protocol/resp/RespEncode.h"
 
+namespace {
+
+bool WantsFullsync(const std::string& replid, int64_t offset) {
+  if (offset < 0) {
+    return true;
+  }
+  return replid.empty() || replid == "?";
+}
+
+}  // namespace
+
+std::string ReplicationMaster::GenerateReplid() {
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::random_device rd;
+  std::string id;
+  id.resize(kReplidLen);
+  for (std::size_t i = 0; i < kReplidLen; ++i) {
+    id[i] = kHex[rd() & 0xfu];
+  }
+  return id;
+}
+
 ReplicationMaster::ReplicationMaster(SnapshotManager* snapshot)
-    : snapshot_(snapshot) {
+    : snapshot_(snapshot), replid_(GenerateReplid()) {
   if (snapshot_ != nullptr) {
     snapshot_->SetSaveDoneCallback(
         [this](bool ok, const std::string& path) { OnSaveDone(ok, path); });
   }
+  spdlog::info("replication master replid={}", replid_);
 }
 
 void ReplicationMaster::OnConnection(TcpConn::Ptr conn) {
@@ -30,7 +55,42 @@ void ReplicationMaster::OnConnection(TcpConn::Ptr conn) {
   });
 }
 
-void ReplicationMaster::OnPsync(int client_fd, std::string* reply) {
+bool ReplicationMaster::TryPartialResync(int client_fd, TcpConn::Ptr conn,
+                                         uint64_t offset, std::string* reply) {
+  if (!conn || conn->closed() || reply == nullptr) {
+    return false;
+  }
+  if (!backlog_.Contains(offset)) {
+    return false;
+  }
+
+  std::string payload;
+  if (!backlog_.CopyRange(offset, backlog_.tip(), &payload)) {
+    return false;
+  }
+
+  Slave slave;
+  slave.conn = conn;
+  slave.state = SlaveState::kSynced;
+  slave.backlog_start = offset;
+  slaves_[client_fd] = std::move(slave);
+
+  std::string cont;
+  RespEncode::AppendSimpleString(&cont, "CONTINUE");
+  conn->Send(cont.data(), cont.size());
+  if (!payload.empty()) {
+    // Catch-up is raw frames (no RESP bulk); slave enters streaming immediately.
+    conn->Send(payload.data(), payload.size());
+  }
+  reply->clear();
+  spdlog::info(
+      "PSYNC CONTINUE slave fd={} offset={} catchup_bytes={} tip={}",
+      client_fd, offset, payload.size(), backlog_.tip());
+  return true;
+}
+
+void ReplicationMaster::OnPsync(int client_fd, const std::string& replid,
+                                int64_t offset, std::string* reply) {
   if (reply == nullptr) {
     return;
   }
@@ -45,22 +105,29 @@ void ReplicationMaster::OnPsync(int client_fd, std::string* reply) {
     return;
   }
 
+  // Drop any previous slave registration for this fd.
+  RemoveSlave(client_fd);
+
+  if (!WantsFullsync(replid, offset) && replid == replid_ &&
+      offset >= 0 &&
+      TryPartialResync(client_fd, it->second, static_cast<uint64_t>(offset),
+                       reply)) {
+    return;
+  }
+
   Slave slave;
   slave.conn = it->second;
   slave.state = SlaveState::kWaitRdb;
   slave.backlog_start = backlog_.tip();
   slaves_[client_fd] = std::move(slave);
-  spdlog::info("PSYNC registered slave fd={}", client_fd);
+  spdlog::info("PSYNC FULLRESYNC registered slave fd={} (replid_ok={} offset={})",
+               client_fd, replid == replid_, offset);
 
   StartFullsyncIfNeeded();
   // Async: +FULLRESYNC sent when RDB is ready.
 }
 
 void ReplicationMaster::FeedBacklog(const vemory::WalEntry& entry) {
-  if (!fullsync_active_ && slaves_.empty()) {
-    return;
-  }
-
   std::string frame;
   if (!ReplicationBacklog::EncodeFrame(entry, &frame)) {
     spdlog::warn("replication backlog encode failed");
@@ -216,7 +283,6 @@ void ReplicationMaster::BeginSendToWaiters() {
       SendRdbToSlave(slave);
     }
   }
-  // If nobody left waiting/sending, clear fullsync_active when all done.
 }
 
 void ReplicationMaster::SendRdbToSlave(Slave* slave) {
@@ -232,8 +298,14 @@ void ReplicationMaster::SendRdbToSlave(Slave* slave) {
   }
 
   slave->state = SlaveState::kSendingRdb;
+  char fr_line[128];
+  const int fr_n =
+      std::snprintf(fr_line, sizeof(fr_line), "FULLRESYNC %s %llu",
+                    replid_.c_str(),
+                    static_cast<unsigned long long>(slave->backlog_start));
   std::string hdr;
-  RespEncode::AppendSimpleString(&hdr, "FULLRESYNC");
+  RespEncode::AppendSimpleString(
+      &hdr, std::string_view(fr_line, static_cast<std::size_t>(fr_n)));
   char len_line[64];
   const int n = std::snprintf(len_line, sizeof(len_line), "$%lld\r\n",
                               static_cast<long long>(st.st_size));

@@ -45,6 +45,8 @@ void ClearOut(RequestContext* out, int client_fd, CommandType cmd) {
   out->threshold = 0.f;
   out->key.clear();
   out->element.clear();
+  out->psync_replid.clear();
+  out->psync_offset = -1;
   out->recv_time = {};
 }
 
@@ -170,10 +172,24 @@ RequestContext::Status RequestContext::FromTokens(
       return Status::kOk;
     }
     case CommandType::kPsync: {
-      if (tokens.size() != 1) {
+      // PSYNC | PSYNC <replid> <offset>
+      if (tokens.size() != 1 && tokens.size() != 3) {
         return fail(Status::kWrongArity);
       }
       ClearOut(out, client_fd, cmd);
+      if (tokens.size() == 3) {
+        if (tokens[1].empty() || tokens[2].empty()) {
+          return fail(Status::kBadValue);
+        }
+        out->psync_replid.assign(tokens[1].data(), tokens[1].size());
+        char* end = nullptr;
+        const std::string off_tmp(tokens[2]);
+        const long long v = std::strtoll(off_tmp.c_str(), &end, 10);
+        if (end == off_tmp.c_str() || *end != '\0') {
+          return fail(Status::kBadValue);
+        }
+        out->psync_offset = static_cast<int64_t>(v);
+      }
       out->recv_time = std::chrono::steady_clock::now();
       return Status::kOk;
     }

@@ -80,6 +80,7 @@ void ReplicationSlave::ResetLink() {
   rdb_remaining_ = -1;
   backlog_remaining_ = -1;
   state_ = State::kInit;
+  // Keep master_replid_ / repl_offset_ / have_offset_ for partial resync.
 }
 
 void ReplicationSlave::ScheduleReconnect(const std::string& reason) {
@@ -98,6 +99,14 @@ void ReplicationSlave::ScheduleReconnect(const std::string& reason) {
   });
 }
 
+void ReplicationSlave::AdvanceOffset(std::size_t n) {
+  if (n == 0) {
+    return;
+  }
+  repl_offset_ += n;
+  have_offset_ = true;
+}
+
 void ReplicationSlave::TryConnect() {
   if (stopping_ || loop_ == nullptr || snapshot_ == nullptr) {
     return;
@@ -114,8 +123,23 @@ void ReplicationSlave::TryConnect() {
   conn_ = std::make_shared<TcpConn>(fd, *loop_);
   state_ = State::kWaitFullresync;
 
-  const char psync[] = "*1\r\n$5\r\nPSYNC\r\n";
-  conn_->Send(psync, sizeof(psync) - 1);
+  std::string psync;
+  if (have_offset_ && !master_replid_.empty()) {
+    char off_buf[32];
+    std::snprintf(off_buf, sizeof(off_buf), "%llu",
+                  static_cast<unsigned long long>(repl_offset_));
+    const std::string off(off_buf);
+    // *3\r\n$5\r\nPSYNC\r\n$<len>\r\n<replid>\r\n$<len>\r\n<offset>\r\n
+    psync = "*3\r\n$5\r\nPSYNC\r\n$" + std::to_string(master_replid_.size()) +
+            "\r\n" + master_replid_ + "\r\n$" + std::to_string(off.size()) +
+            "\r\n" + off + "\r\n";
+    spdlog::info("slave: sent PSYNC {} {} to {}:{}", master_replid_,
+                 repl_offset_, master_host_, master_port_);
+  } else {
+    psync = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
+    spdlog::info("slave: sent PSYNC ? -1 to {}:{}", master_host_, master_port_);
+  }
+  conn_->Send(psync.data(), psync.size());
   conn_->SetReadCallback([this]() { OnReadable(); });
   conn_->SetCloseCallback([this]() {
     if (closing_ || stopping_) {
@@ -123,8 +147,6 @@ void ReplicationSlave::TryConnect() {
     }
     Fail("connection closed");
   });
-
-  spdlog::info("slave: sent PSYNC to {}:{}", master_host_, master_port_);
 }
 
 void ReplicationSlave::EnterStreaming() {
@@ -174,6 +196,39 @@ void ReplicationSlave::Fail(const std::string& msg) {
   }
   closing_ = false;
   ScheduleReconnect(msg);
+}
+
+bool ReplicationSlave::HandleSyncReply(const std::string& reply) {
+  if (reply == "CONTINUE") {
+    spdlog::info("slave: CONTINUE from offset={}", repl_offset_);
+    EnterStreaming();
+    return true;
+  }
+
+  // FULLRESYNC <replid> <offset>
+  if (reply.rfind("FULLRESYNC ", 0) != 0) {
+    Fail("unexpected reply: " + reply);
+    return false;
+  }
+  const std::string rest = reply.substr(std::strlen("FULLRESYNC "));
+  const auto sp = rest.find(' ');
+  if (sp == std::string::npos || sp == 0 || sp + 1 >= rest.size()) {
+    Fail("bad FULLRESYNC reply: " + reply);
+    return false;
+  }
+  master_replid_ = rest.substr(0, sp);
+  char* end = nullptr;
+  const unsigned long long cut = std::strtoull(rest.c_str() + sp + 1, &end, 10);
+  if (end == rest.c_str() + sp + 1 || *end != '\0') {
+    Fail("bad FULLRESYNC offset: " + reply);
+    return false;
+  }
+  repl_offset_ = static_cast<uint64_t>(cut);
+  have_offset_ = true;
+  spdlog::info("slave: FULLRESYNC replid={} cut_offset={}", master_replid_,
+               repl_offset_);
+  state_ = State::kRecvRdbHeader;
+  return true;
 }
 
 bool ReplicationSlave::ConsumeSimpleString(std::string* out) {
@@ -267,7 +322,11 @@ bool ReplicationSlave::FinishRdbAndLoad() {
 
 bool ReplicationSlave::ConsumeStreamFrames(std::string* bytes,
                                            VNodeIndex* vnode_index, KvStore* kv,
-                                           std::string* err) {
+                                           std::string* err,
+                                           std::size_t* bytes_consumed) {
+  if (bytes_consumed != nullptr) {
+    *bytes_consumed = 0;
+  }
   if (bytes == nullptr) {
     return false;
   }
@@ -300,13 +359,17 @@ bool ReplicationSlave::ConsumeStreamFrames(std::string* bytes,
   if (off > 0) {
     bytes->erase(0, off);
   }
+  if (bytes_consumed != nullptr) {
+    *bytes_consumed = off;
+  }
   return true;
 }
 
 bool ReplicationSlave::ApplyBacklog(const std::string& bytes) {
   std::string buf = bytes;
   std::string err;
-  if (!ConsumeStreamFrames(&buf, vnode_index_, kv_, &err)) {
+  std::size_t consumed = 0;
+  if (!ConsumeStreamFrames(&buf, vnode_index_, kv_, &err, &consumed)) {
     Fail(err.empty() ? "backlog apply failed" : err);
     return false;
   }
@@ -314,6 +377,7 @@ bool ReplicationSlave::ApplyBacklog(const std::string& bytes) {
     Fail("truncated backlog frame");
     return false;
   }
+  AdvanceOffset(consumed);
   return true;
 }
 
@@ -324,10 +388,12 @@ bool ReplicationSlave::DrainStreaming() {
     conn_->InputBuffer().ReadCompleted(avail);
   }
   std::string err;
-  if (!ConsumeStreamFrames(&stream_buf_, vnode_index_, kv_, &err)) {
+  std::size_t consumed = 0;
+  if (!ConsumeStreamFrames(&stream_buf_, vnode_index_, kv_, &err, &consumed)) {
     Fail(err.empty() ? "stream apply failed" : err);
     return false;
   }
+  AdvanceOffset(consumed);
   return true;
 }
 
@@ -344,11 +410,9 @@ void ReplicationSlave::OnReadable() {
       if (!ConsumeSimpleString(&s)) {
         return;
       }
-      if (s != "FULLRESYNC") {
-        Fail("unexpected reply: " + s);
+      if (!HandleSyncReply(s)) {
         return;
       }
-      state_ = State::kRecvRdbHeader;
       continue;
     }
 

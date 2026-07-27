@@ -53,9 +53,25 @@ TEST(RequestContext, FromTokens_Psync) {
   EXPECT_EQ(st, RequestContext::Status::kOk);
   EXPECT_EQ(ctx.cmd, CommandType::kPsync);
   EXPECT_EQ(ctx.client_fd, 3);
+  EXPECT_TRUE(ctx.psync_replid.empty());
+  EXPECT_EQ(ctx.psync_offset, -1);
+
+  st = RequestContext::FromTokens(3, {"PSYNC", "?", "-1"}, &ctx);
+  EXPECT_EQ(st, RequestContext::Status::kOk);
+  EXPECT_EQ(ctx.psync_replid, "?");
+  EXPECT_EQ(ctx.psync_offset, -1);
+
+  st = RequestContext::FromTokens(
+      3, {"PSYNC", "abc123", "42"}, &ctx);
+  EXPECT_EQ(st, RequestContext::Status::kOk);
+  EXPECT_EQ(ctx.psync_replid, "abc123");
+  EXPECT_EQ(ctx.psync_offset, 42);
 
   st = RequestContext::FromTokens(3, {"PSYNC", "extra"}, &ctx);
   EXPECT_EQ(st, RequestContext::Status::kWrongArity);
+
+  st = RequestContext::FromTokens(3, {"PSYNC", "id", "nope"}, &ctx);
+  EXPECT_EQ(st, RequestContext::Status::kBadValue);
 }
 
 TEST(ReplicationBacklog, FeedAndCopyRange) {
@@ -116,6 +132,24 @@ TEST(ReplicationSlave, NextBackoffMs) {
   EXPECT_EQ(ReplicationSlave::NextBackoffMs(32000), 60000u);
   EXPECT_EQ(ReplicationSlave::NextBackoffMs(60000), 60000u);
   EXPECT_EQ(ReplicationSlave::NextBackoffMs(60001), 60000u);
+}
+
+TEST(ReplicationSlave, ConsumeStreamFrames_BytesConsumed) {
+  VNodeIndex idx(16);
+  KvStore kv;
+  vemory::WalEntry e;
+  e.set_op(vemory::WalEntry::SET);
+  e.set_key("c");
+  e.set_value("3");
+  std::string frame;
+  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e, &frame));
+  std::string buf = frame;
+  std::string err;
+  std::size_t consumed = 0;
+  ASSERT_TRUE(ReplicationSlave::ConsumeStreamFrames(&buf, &idx, &kv, &err,
+                                                    &consumed));
+  EXPECT_EQ(consumed, frame.size());
+  EXPECT_TRUE(buf.empty());
 }
 
 TEST(ReplicationSlave, ConsumeStreamFrames_PartialAndMulti) {

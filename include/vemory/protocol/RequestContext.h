@@ -24,6 +24,10 @@ struct RequestContext {
   std::string key;
   std::string element;
 
+  // PSYNC: empty/`?` + offset -1 → fullsync; otherwise try partial.
+  std::string psync_replid;
+  int64_t psync_offset = -1;
+
   std::chrono::steady_clock::time_point recv_time{};
 
   enum class Status : uint8_t {
@@ -43,6 +47,7 @@ struct RequestContext {
   //   DEL <key>
   //   PING [<message>]    (message in element)
   //   ECHO <message>      (message in element)
+  //   PSYNC | PSYNC <replid> <offset>
   static Status FromTokens(int client_fd,
                            const std::vector<std::string_view>& tokens,
                            RequestContext* out);

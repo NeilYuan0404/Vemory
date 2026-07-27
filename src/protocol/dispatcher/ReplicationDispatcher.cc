@@ -18,5 +18,5 @@ void ReplicationDispatcher(const RequestContext& ctx, std::string* reply,
     RespEncode::AppendError(reply, "ERR not a master");
     return;
   }
-  master->OnPsync(ctx.client_fd, reply);
+  master->OnPsync(ctx.client_fd, ctx.psync_replid, ctx.psync_offset, reply);
 }

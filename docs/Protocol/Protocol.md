@@ -55,7 +55,7 @@ TcpConn::ReadCallback
 | `SET` / `GET` / `DEL` | string KVS | as Redis-style |
 | `PING` / `ECHO` | assist | |
 | `SAVE` | (none) | `+OK` or `-ERR …` (fork background RDB) |
-| `PSYNC` | (none) | async `+FULLRESYNC` + RDB bulk + backlog bulk (see [`../Persist/Replication.md`](../Persist/Replication.md)) |
+| `PSYNC` | (none) or `<replid> <offset>` | async `+FULLRESYNC <replid> <cut>` + RDB/backlog, or `+CONTINUE` + catch-up frames (see [`../Persist/Replication.md`](../Persist/Replication.md)) |
 
 `vector_blob` / query blob: raw little-endian `float` bytes; `dim = len / sizeof(float)`.  
 `threshold`: cosine **distance** upper bound (hit iff best distance ≤ threshold).
@@ -66,6 +66,7 @@ TcpConn::ReadCallback
 | `user_key` / `question` / `answer` | VSET / VDEL |
 | `threshold` | VGET distance gate |
 | `key` / `element` | SET/GET/DEL / PING/ECHO |
+| `psync_replid` / `psync_offset` | PSYNC partial (`-1` = fullsync request) |
 
 ---
 

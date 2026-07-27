@@ -10,8 +10,9 @@
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Timer.h"
 
-// Slave-side: connect master, PSYNC, receive tmp RDB + backlog, then stream.
-// On link failure, reconnects with exponential backoff and fullsyncs again.
+// Slave-side: PSYNC fullsync or partial (+CONTINUE), then stream apply.
+// On link failure, reconnects with exponential backoff; retries with
+// replid+offset when known (partial if still in master backlog).
 class ReplicationSlave {
  public:
   static constexpr const char* kTmpDir = "tmp";
@@ -45,15 +46,20 @@ class ReplicationSlave {
   bool Start(const std::string& host, uint16_t port);
 
   State state() const { return state_; }
+  uint64_t repl_offset() const { return repl_offset_; }
+  const std::string& master_replid() const { return master_replid_; }
+  bool have_offset() const { return have_offset_; }
 
   // Double current backoff, capped at kMaxBackoffMs.
   static uint64_t NextBackoffMs(uint64_t current_ms);
 
   // Parse and apply zero or more complete u32le+WalEntry frames from *bytes.
   // Consumes complete frames from the front of *bytes; leaves a partial frame.
+  // On success, *bytes_consumed (if non-null) is set to erased byte count.
   // Returns false on corrupt frame.
   static bool ConsumeStreamFrames(std::string* bytes, VNodeIndex* vnode_index,
-                                  KvStore* kv, std::string* err);
+                                  KvStore* kv, std::string* err,
+                                  std::size_t* bytes_consumed = nullptr);
 
  private:
   void OnReadable();
@@ -65,12 +71,14 @@ class ReplicationSlave {
   bool ApplyBacklog(const std::string& bytes);
   bool DrainStreaming();
   void Fail(const std::string& msg);
+  bool HandleSyncReply(const std::string& reply);
 
   void CancelReconnectTimer();
   void ResetLink();
   void ScheduleReconnect(const std::string& reason);
   void TryConnect();
   void EnterStreaming();
+  void AdvanceOffset(std::size_t n);
 
   EventLoop* loop_;
   SnapshotManager* snapshot_;
@@ -90,4 +98,9 @@ class ReplicationSlave {
   uint64_t backoff_ms_ = kMinBackoffMs;
   bool closing_ = false;
   bool stopping_ = false;
+
+  // Survives ResetLink / Fail for partial resync on reconnect.
+  std::string master_replid_;
+  uint64_t repl_offset_ = 0;
+  bool have_offset_ = false;
 };

@@ -18,7 +18,7 @@ enum class AofFsyncPolicy : uint8_t {
 // AOF flush backend (persistence.aof_io).
 enum class AofIoMode : uint8_t {
   kAuto = 0,     // try io_uring, else thread (experimental path via auto)
-  kThread = 1,   // RingBuffer + fwrite flush thread (default / recommended)
+  kThread = 1,   // BlockingQueue + fwrite flush thread (default / recommended)
   kIoUring = 2,  // RingBuffer + pipelined io_uring writev (experimental; fallback on fail)
 };
 

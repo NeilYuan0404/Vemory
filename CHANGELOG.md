@@ -6,18 +6,20 @@ All notable changes to Vemory are documented in this file.
 
 ## [1.0.0] — 2026-07-27
 
-First stable release: semantic cache + string KVS, optional RDB/AOF, and PSYNC replication (fullsync, stream, partial resync, auto-reconnect, replica-readonly).
+First stable release of a RESP semantic cache server (plus string KVS), with optional persistence and master/slave replication.
 
-### Added
+### What's in 1.0
+- Semantic cache: `VSET` / `VGET` / `VDEL` (client-supplied float32 embeddings)
+- String KVS: `SET` / `GET` / `DEL`, plus `PING` / `ECHO` / `SAVE`
+- Persistence: single-file RDB v2 (`dump.rdb`); optional protobuf AOF (startup: RDB then AOF replay when enabled)
+- Replication: `--slaveof` — fullsync, live stream, partial resync, auto-reconnect, replica-readonly
+- Runtime: single-threaded epoll; default vendored tcmalloc heap
+- Wire / formats: RESP command channel; RDB magic `VEMORYDB` version 2; AOF/replication `u32le` + `WalEntry` frames
+
+### New since 0.5.2
 - PSYNC partial resync: `PSYNC <replid> <offset>` → `+CONTINUE` catch-up from backlog when offset retained; else `+FULLRESYNC <replid> <cut>`
 - Process-lifetime master `replid` (40 hex); replication backlog always fed on mutations
 - Smoke: [`bench/smoke/repl_reconnect_partial.sh`](bench/smoke/repl_reconnect_partial.sh)
-
-### Stable surface
-- Commands: `VSET` / `VGET` / `VDEL`, `SET` / `GET` / `DEL`, `PING` / `ECHO`, `SAVE`, `PSYNC`
-- Persistence: single-file RDB v2 (`dump.rdb`), optional protobuf AOF; startup load = RDB then AOF replay when enabled
-- Replication: `--slaveof`, fullsync + live stream + partial resync; replica-readonly client writes
-- Wire / formats: RESP command channel; RDB magic `VEMORYDB` version 2; AOF/replication `u32le` + `WalEntry` frames
 
 ### Limits
 - Not a Redis / Redis Vector Set drop-in

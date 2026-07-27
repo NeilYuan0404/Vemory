@@ -1,10 +1,14 @@
 # Vemory
 
+[![Release](https://img.shields.io/github/v/release/NeilYuan0404/Vemory)](https://github.com/NeilYuan0404/Vemory/releases/latest)
+[![CI](https://github.com/NeilYuan0404/Vemory/actions/workflows/ci.yml/badge.svg)](https://github.com/NeilYuan0404/Vemory/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/NeilYuan0404/Vemory)](LICENSE)
+
 English | [中文](README.zh-CN.md)
 
-RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
+RESP semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` for strings; binary `VSET`/`VGET` need a library).
 
-**v1.0.0** — stable semantic cache server with optional persistence and master/slave replication. Single-file RDB (`SAVE` / `dump.rdb`), protobuf AOF (`persistence.aof`), PSYNC fullsync + stream + partial resync (`--slaveof`; auto-reconnect, replica-readonly), default vendored tcmalloc heap. Single-threaded epoll. Primary API: `VSET`/`VGET`/`VDEL` (binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a Redis / Redis Vector Set drop-in. See [`CHANGELOG.md`](CHANGELOG.md) for the stable surface and Limits.
+**v1.0.0** — optional RDB/AOF persistence and PSYNC replication (`--slaveof`). Primary API: `VSET`/`VGET`/`VDEL` plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a Redis drop-in. Stable surface and Limits: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
@@ -38,10 +42,10 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | Section | Key | Default | Meaning |
 |---------|-----|---------|---------|
 | `server` | `port` | `6379` | Listen port |
-| `server` | `bind` | `0.0.0.0` | IPv4 bind address |
+| `server` | `bind` | `0.0.0.0` | IPv4 bind address (no auth — do not expose publicly without a firewall) |
 | `logging` | `level` | `info` | `trace`/`debug`/`info`/`warn`/`error`/`critical`/`off` |
 | `storage` | `kv_reserve` | `100000` | `KvStore` pre-reserve |
-| `index` | `default_capacity` | `1024` | Initial vector-set capacity |
+| `index` | `default_capacity` | `1024` | Initial semantic-cache index capacity |
 | `persistence` | `dir` | `data` | RDB snapshot directory; empty disables `SAVE` |
 | `persistence` | `load_on_startup` | `false` | Load `dump.rdb` from `dir` on startup |
 | `persistence` | `aof` | `false` | Protobuf AOF at `dir/appendonly.aof` |
@@ -214,6 +218,6 @@ Design notes by layer:
 | Persist / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
 | Persist / AOF | [`docs/Persist/Aof.md`](docs/Persist/Aof.md) |
 | Replication / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
-| Embed index / vector sets | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
+| Embed index / semantic cache ANN | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
 Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/` and `replication/`), schemas in `proto/` (`VNode.proto`, `WalEntry.proto`).

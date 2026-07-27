@@ -1,6 +1,6 @@
 # Storage Layer
 
-Owns string KVS (`KvStore`), semantic-cache nodes (`VNode` / `VNodeStorage` / `VNodeIndex`), and protobuf codec for snapshot nodes / future replication.
+Owns string KVS (`KvStore`), semantic-cache nodes (`VNode` / `VNodeStorage` / `VNodeIndex`), and protobuf codec for RDB node state (`ProtobufVNodeCodec`). Mutation log / replication frames use `WalEntry` (see [`../Persist/Aof.md`](../Persist/Aof.md)).
 
 Live command paths:
 
@@ -19,7 +19,7 @@ Network / parse: [`../Protocol/Protocol.md`](../Protocol/Protocol.md).
 |--------------|----------------------|
 | `KvStore` (SET/GET/DEL + Dump/Load) | RESP wire decode |
 | `VNode` / `VNodeStorage` / `VNodeIndex` | Snapshot fork / fsync / rename |
-| `ProtobufVNodeCodec` (snapshot nodes / future replication) | |
+| `ProtobufVNodeCodec` (RDB NODES section) | AOF / replication `WalEntry` frames |
 
 ---
 

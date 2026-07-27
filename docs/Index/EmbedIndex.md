@@ -57,4 +57,3 @@ Usearch-backed ANN. Cosine metric, `f32`.
 ## Follow-ups (not implemented)
 
 - Multi-tenant / namespaced indexes
-- WAL / AOF; replication stream with vectors in protobuf

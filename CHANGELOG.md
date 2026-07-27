@@ -4,6 +4,9 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Docs/README polish: drop stale “future replication” / MVP wording; semantic-cache naming; CI workflow; README badges
+
 ## [1.0.0] — 2026-07-27
 
 First stable release of a RESP semantic cache server (plus string KVS), with optional persistence and master/slave replication.

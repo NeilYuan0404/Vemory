@@ -51,7 +51,7 @@ Both backends honor `aof_fsync`. Replay is always synchronous `fopen` read (not 
 | `VNodePb` | `proto/VNode.proto` | RDB node **state** (no vector) via `ProtobufVNodeCodec` |
 | `WalEntry` | `proto/WalEntry.proto` | One **mutation** (SET/DEL/VSET/VDEL; VSET includes `vector`) |
 
-AOF and future replication share `WalEntry`. Do not reuse `ProtobufVNodeCodec` for the log.
+AOF and replication share `WalEntry` frames. Do not reuse `ProtobufVNodeCodec` for the log.
 
 ---
 
@@ -61,7 +61,7 @@ AOF and future replication share `WalEntry`. Do not reuse `ProtobufVNodeCodec` f
 u32le payload_len | protobuf WalEntry bytes
 ```
 
-No CRC in MVP. Truncated tail (incomplete length or payload) stops replay at the last good record.
+No per-frame CRC. Truncated tail (incomplete length or payload) stops replay at the last good record.
 
 ---
 

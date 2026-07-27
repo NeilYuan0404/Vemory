@@ -1,10 +1,14 @@
 # Vemory
 
+[![Release](https://img.shields.io/github/v/release/NeilYuan0404/Vemory)](https://github.com/NeilYuan0404/Vemory/releases/latest)
+[![CI](https://github.com/NeilYuan0404/Vemory/actions/workflows/ci.yml/badge.svg)](https://github.com/NeilYuan0404/Vemory/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/NeilYuan0404/Vemory)](LICENSE)
+
 [English](README.md) | 中文
 
-兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串可用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
+兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
 
-**v1.0.0 — 稳定版语义缓存服务端（可选持久化与主从复制）。** 单文件 RDB（`SAVE` / `dump.rdb`）、Protobuf AOF（`persistence.aof`），PSYNC 全量 + 增量直推 + 部分重同步（`--slaveof`；自动重连、从库只读），默认内置 tcmalloc 堆。单线程 epoll。主 API：`VSET`/`VGET`/`VDEL`（二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。稳定面与 Limits 见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v1.0.0** — 可选 RDB/AOF 与 PSYNC 主从（`--slaveof`）。主 API：`VSET`/`VGET`/`VDEL`，另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis 替代品。稳定面与 Limits：[`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 
@@ -38,10 +42,10 @@ redis-cli -p 8989
 | 节 | 键 | 默认值 | 含义 |
 |---------|-----|---------|---------|
 | `server` | `port` | `6379` | 监听端口 |
-| `server` | `bind` | `0.0.0.0` | IPv4 绑定地址 |
+| `server` | `bind` | `0.0.0.0` | IPv4 绑定地址（无鉴权——公网请勿裸奔，需防火墙） |
 | `logging` | `level` | `info` | `trace`/`debug`/`info`/`warn`/`error`/`critical`/`off` |
 | `storage` | `kv_reserve` | `100000` | `KvStore` 预留容量 |
-| `index` | `default_capacity` | `1024` | 向量集合初始容量 |
+| `index` | `default_capacity` | `1024` | 语义缓存索引初始容量 |
 | `persistence` | `dir` | `data` | RDB 快照目录；空则 `SAVE` 不可用 |
 | `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.rdb` |
 | `persistence` | `aof` | `false` | Protobuf AOF：`dir/appendonly.aof` |
@@ -214,6 +218,6 @@ client
 | 持久化 / RDB | [`docs/Persist/Snapshot.md`](docs/Persist/Snapshot.md) |
 | 持久化 / AOF | [`docs/Persist/Aof.md`](docs/Persist/Aof.md) |
 | 复制 / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
-| 嵌入索引 / 向量集合 | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
+| 嵌入索引 / 语义缓存 ANN | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
 目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`、`replication/`），schema 在 `proto/`（`VNode.proto`、`WalEntry.proto`）。

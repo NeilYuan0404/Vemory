@@ -137,7 +137,7 @@ Replaces in-memory KV + semantic cache from `dir` on the **calling thread**.
 
 Order:
 
-1. Open `dump.rdb`, read/validate Header (magic `VEMORYDB`, version 2)
+1. Open `dump.rdb`, read/validate Header (magic `VEMORYDB`, version 3)
 2. Seek TOC[0]; `KvStore::Clear` + `Load` (check `kv_count`)
 3. Seek TOC[1]; `VNodeIndex::Clear` + `LoadNodes` (restore ids / `next_id`)
 4. If `dim > 0`, seek TOC[2]; `LoadIndex` from the usearch segment

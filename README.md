@@ -1,6 +1,6 @@
 # Vemory
 
-[![Release](https://img.shields.io/github/v/release/NeilYuan0404/Vemory)](https://github.com/NeilYuan0404/Vemory/releases/latest)
+[![Tag](https://img.shields.io/github/v/tag/NeilYuan0404/Vemory)](https://github.com/NeilYuan0404/Vemory/tags)
 [![CI](https://github.com/NeilYuan0404/Vemory/actions/workflows/ci.yml/badge.svg)](https://github.com/NeilYuan0404/Vemory/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/NeilYuan0404/Vemory)](LICENSE)
 
@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 RESP semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` for strings; binary `VSET`/`VGET` need a library).
 
-**v1.0.0** — optional RDB/AOF persistence and PSYNC replication (`--slaveof`). Primary API: `VSET`/`VGET`/`VDEL` plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a Redis drop-in. Stable surface and Limits: [`CHANGELOG.md`](CHANGELOG.md).
+**v1.1.0** — optional RDB/AOF persistence and PSYNC replication (`--slaveof`). Default AOF path is inline io_uring (`aof_io=auto`). Primary API: `VSET`/`VGET`/`VDEL` plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a Redis drop-in. Stable surface and Limits: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 

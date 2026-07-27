@@ -4,11 +4,29 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-28
+
+Inline AOF on the reactor (kvstore-style) and RESP-only persistence wire format.
+
 ### Changed
 - AOF default `aof_io=auto`: same-thread growable buffer + inline io_uring on the reactor (`Poll` via EventLoop idle); `thread` remains the no-liburing fallback. New `aof_flush_interval_ms` (default 1000). Inline io_uring is the supported default path (no longer experimental).
 - Replication: feed backlog only when `has_slaves()`; skip RESP encode when neither AOF nor slaves.
 - AOF / replication / RDB NODES: drop protobuf; use RESP write commands (vectors as bulk bytes). RDB version 3. Remove `protoc` / `libprotobuf` build dependency.
 - Docs/README polish: drop stale “future replication” / MVP wording; semantic-cache naming; CI workflow; README badges; AOF bench numbers for `aof_io=auto` (inline io_uring)
+
+### Breaking
+- Pre-RESP AOF (`u32le` + protobuf `WalEntry`) is not loaded — delete/rebuild `appendonly.aof`.
+- RDB v2 (protobuf NODES) is not loaded — resave under v3 or start empty.
+
+### Limits (unchanged from 1.0 unless noted)
+- Not a Redis / Redis Vector Set drop-in
+- No AOF rewrite after `SAVE` (AOF only grows while enabled)
+- No auth; bind carefully for non-local use
+- Internal ANN / metadata ids are `uint16` (~65k entries)
+- No server-side embedding; clients send float blobs
+- Single-threaded epoll reactor
+- Master restart issues a new `replid` (slaves must fullsync); backlog is process-local
+- Without `liburing`, `aof_io=auto|iouring` falls back to the flush-thread backend
 
 ## [1.0.0] — 2026-07-27
 

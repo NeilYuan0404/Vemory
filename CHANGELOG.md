@@ -4,10 +4,30 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-07-27
+
+First stable release: semantic cache + string KVS, optional RDB/AOF, and PSYNC replication (fullsync, stream, partial resync, auto-reconnect, replica-readonly).
+
 ### Added
 - PSYNC partial resync: `PSYNC <replid> <offset>` → `+CONTINUE` catch-up from backlog when offset retained; else `+FULLRESYNC <replid> <cut>`
 - Process-lifetime master `replid` (40 hex); replication backlog always fed on mutations
 - Smoke: [`bench/smoke/repl_reconnect_partial.sh`](bench/smoke/repl_reconnect_partial.sh)
+
+### Stable surface
+- Commands: `VSET` / `VGET` / `VDEL`, `SET` / `GET` / `DEL`, `PING` / `ECHO`, `SAVE`, `PSYNC`
+- Persistence: single-file RDB v2 (`dump.rdb`), optional protobuf AOF; startup load = RDB then AOF replay when enabled
+- Replication: `--slaveof`, fullsync + live stream + partial resync; replica-readonly client writes
+- Wire / formats: RESP command channel; RDB magic `VEMORYDB` version 2; AOF/replication `u32le` + `WalEntry` frames
+
+### Limits
+- Not a Redis / Redis Vector Set drop-in
+- No AOF rewrite after `SAVE` (AOF only grows while enabled)
+- No auth; bind carefully for non-local use
+- Internal ANN / metadata ids are `uint16` (~65k entries)
+- No server-side embedding; clients send float blobs
+- Single-threaded epoll reactor
+- Master restart issues a new `replid` (slaves must fullsync); backlog is process-local
+- `aof_io=iouring` remains experimental; prefer `thread`
 
 ## [0.5.2] — 2026-07-27
 

@@ -4,7 +4,7 @@
 
 兼容 RESP 的语义缓存服务端（另含字符串 KVS）。可用 RESP 客户端连接（字符串可用 `redis-cli`；二进制 `VSET`/`VGET` 需客户端库）。
 
-**v0.5.2 — 早期 MVP（含可选持久化、主从复制自动重连与只读从库，默认内置 tcmalloc 堆）。** 单文件 RDB（`SAVE` / `dump.rdb`）、Protobuf AOF（`persistence.aof`），以及 PSYNC 全量 + 增量直推（`--slaveof`）。单线程 epoll。主 API 为语义缓存（`VSET`/`VGET`/`VDEL`，二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。详见 [`CHANGELOG.md`](CHANGELOG.md)。
+**v1.0.0 — 稳定版语义缓存服务端（可选持久化与主从复制）。** 单文件 RDB（`SAVE` / `dump.rdb`）、Protobuf AOF（`persistence.aof`），PSYNC 全量 + 增量直推 + 部分重同步（`--slaveof`；自动重连、从库只读），默认内置 tcmalloc 堆。单线程 epoll。主 API：`VSET`/`VGET`/`VDEL`（二进制 float blob），另含 `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`。并非 Redis / Redis Vector Set 替代品。稳定面与 Limits 见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 依赖
 

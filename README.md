@@ -4,7 +4,7 @@ English | [中文](README.zh-CN.md)
 
 RESP-speaking semantic cache server (plus string KVS). Talk to it with a RESP client (`redis-cli` works for strings; binary `VSET`/`VGET` need a library).
 
-**v0.5.2** — early MVP with optional persistence, master/slave replication (auto-reconnect + replica-readonly), and default vendored tcmalloc heap. Single-file RDB (`SAVE` / `dump.rdb`), protobuf AOF (`persistence.aof`), and PSYNC fullsync + stream (`--slaveof`). Single-threaded epoll reactor. Primary API is semantic cache (`VSET`/`VGET`/`VDEL` with binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a drop-in Redis or Redis Vector Set replacement. See [`CHANGELOG.md`](CHANGELOG.md).
+**v1.0.0** — stable semantic cache server with optional persistence and master/slave replication. Single-file RDB (`SAVE` / `dump.rdb`), protobuf AOF (`persistence.aof`), PSYNC fullsync + stream + partial resync (`--slaveof`; auto-reconnect, replica-readonly), default vendored tcmalloc heap. Single-threaded epoll. Primary API: `VSET`/`VGET`/`VDEL` (binary float blobs) plus `SET`/`GET`/`DEL` / `PING`/`ECHO` / `SAVE`. Not a Redis / Redis Vector Set drop-in. See [`CHANGELOG.md`](CHANGELOG.md) for the stable surface and Limits.
 
 ## Requirements
 

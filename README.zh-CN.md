@@ -129,17 +129,17 @@ SET 走 `redis-benchmark`（`c=1 p=1`）；SAVE 在 chunk 之间用 `redis-cli` 
 ### 最近一次 AOF QPS
 
 运行：`python3 bench/aof_bench.py`  
-（release `bin/vemory` `-O2 -DNDEBUG`；`c=1 P=1`，`N=100000`；无 AOF `:8989`，AOF `:8990` / `aof_fsync=everysec` / `aof_io=thread`，Redis `appendonly yes` + `appendfsync everysec` `:6379`）
+（release `bin/vemory` `-O2 -DNDEBUG`；`c=1 P=1`，`N=100000`；无 AOF `:8989`，AOF `:8990` / `aof_fsync=everysec` / `aof_io=auto`（inline io_uring），Redis `appendonly yes` + `appendfsync everysec`）
 
-ECHO（vemory_no_aof）：**13989.93** rps
+ECHO（vemory_no_aof）：**14082.52** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13356.48 | 13002.21 |
-| vemory_aof | 10582.01 | 12835.32 |
-| redis_aof | 9984.03 | 12083.13 |
+| vemory_no_aof | 14088.48 | 13730.61 |
+| vemory_aof | 12481.28 | 13627.69 |
+| redis_aof | 10556.32 | 12850.17 |
 
-仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。两侧 AOF 均为 everysec 刷盘。上表为 `aof_io=thread`；默认现为 `auto`（有 liburing 时走 inline io_uring）。
+仅供参考——单线程事件循环；AOF 写路径与 Redis 不同。两侧 AOF 均为 everysec 刷盘。默认 `aof_io=auto` 在有 liburing 时走同线程 inline io_uring（`thread` 为回退）。
 
 ### 最近一次主从同步 QPS
 

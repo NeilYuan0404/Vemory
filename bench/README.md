@@ -166,7 +166,7 @@ python3 bench/aof_bench.py
 N=10000 VEMORY_PORT=8989 VEMORY_AOF_PORT=8990 REDIS_PORT=6379 python3 bench/aof_bench.py
 ```
 
-Fair compare: Vemory AOF uses `aof_fsync=everysec` ([`conf/vemory_aof_bench.ini`](../conf/vemory_aof_bench.ini)); Redis uses `appendfsync everysec`.
+Fair compare: Vemory AOF uses `aof_fsync=everysec` and `aof_io=auto` (inline io_uring when available; [`conf/vemory_aof_bench.ini`](../conf/vemory_aof_bench.ini)); Redis uses `appendfsync everysec`.
 
 | Env | Default | Meaning |
 |-----|---------|---------|
@@ -334,17 +334,17 @@ Run: `HOST=127.0.0.1 PORT=8989 python3 bench/rdb_save_bench.py`
 ### AOF QPS (`aof_bench.py`)
 
 Run: `python3 bench/aof_bench.py`  
-(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec` / `aof_io=thread`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec` / `aof_io=auto` (inline io_uring), Redis `appendonly yes` + `appendfsync everysec`)
 
-ECHO (vemory_no_aof): **13989.93** rps
+ECHO (vemory_no_aof): **14082.52** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13356.48 | 13002.21 |
-| vemory_aof | 10582.01 | 12835.32 |
-| redis_aof | 9984.03 | 12083.13 |
+| vemory_no_aof | 14088.48 | 13730.61 |
+| vemory_aof | 12481.28 | 13627.69 |
+| redis_aof | 10556.32 | 12850.17 |
 
-Numbers use `aof_io=thread`. `aof_io=iouring` is experimental only — not recommended for real use.
+Numbers use default `aof_io=auto` (inline io_uring). `thread` remains the no-liburing fallback.
 
 ### Replication QPS (`repl_bench.py`)
 

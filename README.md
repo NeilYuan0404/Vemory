@@ -129,17 +129,17 @@ SET via `redis-benchmark` (`c=1 p=1`); SAVE via `redis-cli` between chunks. Indi
 ### Latest AOF QPS
 
 Run: `python3 bench/aof_bench.py`  
-(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; Vemory no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec` / `aof_io=thread`, Redis `appendonly yes` + `appendfsync everysec` `:6379`)
+(release `bin/vemory` `-O2 -DNDEBUG`; `c=1 P=1`, `N=100000`; Vemory no-AOF `:8989`, AOF `:8990` / `aof_fsync=everysec` / `aof_io=auto` (inline io_uring), Redis `appendonly yes` + `appendfsync everysec`)
 
-ECHO (vemory_no_aof): **13989.93** rps
+ECHO (vemory_no_aof): **14082.52** rps
 
 | mode | SET (rps) | GET (rps) |
 |------|----------:|----------:|
-| vemory_no_aof | 13356.48 | 13002.21 |
-| vemory_aof | 10582.01 | 12835.32 |
-| redis_aof | 9984.03 | 12083.13 |
+| vemory_no_aof | 14088.48 | 13730.61 |
+| vemory_aof | 12481.28 | 13627.69 |
+| redis_aof | 10556.32 | 12850.17 |
 
-Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync. Numbers above used `aof_io=thread`; default is now `auto` (inline io_uring when liburing is available).
+Indicative only — single-threaded event loop; AOF write path differs from Redis. Both AOF sides use everysec fsync. Default `aof_io=auto` uses same-thread inline io_uring when liburing is available (`thread` is the fallback).
 
 ### Latest replication QPS
 

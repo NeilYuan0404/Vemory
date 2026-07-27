@@ -8,7 +8,7 @@
 #include "vemory/protocol/RequestContext.h"
 #include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/storage/KvStore.h"
-#include "vemory/storage/ProtobufVNodeCodec.h"
+#include "vemory/storage/RespVNodeCodec.h"
 #include "vemory/storage/VNode.h"
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/storage/VNodeStorage.h"
@@ -23,8 +23,8 @@ std::string FloatBlob(const std::vector<float>& vals) {
 
 }  // namespace
 
-TEST(ProtobufVNodeCodec, EncodeDecodeRoundTrip) {
-  ProtobufVNodeCodec codec;
+TEST(RespVNodeCodec, EncodeDecodeRoundTrip) {
+  RespVNodeCodec codec;
   VNode in;
   in.id = 7;
   in.user_key = "uk";
@@ -32,11 +32,11 @@ TEST(ProtobufVNodeCodec, EncodeDecodeRoundTrip) {
   in.answer = "a";
 
   std::string bytes;
-  ASSERT_EQ(codec.Encode(in, &bytes), ProtobufVNodeCodec::Status::kOk);
+  ASSERT_EQ(codec.Encode(in, &bytes), RespVNodeCodec::Status::kOk);
   ASSERT_FALSE(bytes.empty());
 
   VNode out;
-  ASSERT_EQ(codec.Decode(bytes, &out), ProtobufVNodeCodec::Status::kOk);
+  ASSERT_EQ(codec.Decode(bytes, &out), RespVNodeCodec::Status::kOk);
   EXPECT_EQ(out.id, 7);
   EXPECT_EQ(out.user_key, "uk");
   EXPECT_EQ(out.question, "q");

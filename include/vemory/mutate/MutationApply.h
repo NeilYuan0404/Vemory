@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-#include "WalEntry.pb.h"
+#include "vemory/protocol/RequestContext.h"
 #include "vemory/storage/KvStore.h"
 #include "vemory/storage/VNodeIndex.h"
 
@@ -21,8 +21,8 @@ struct ApplyResult {
   int integer_reply = 0;  // DEL / VDEL
 };
 
-// Apply a WalEntry to memory. Appends to wal only for kClient when wal is set.
-// Feeds replication backlog when repl is non-null (independent of AOF).
-ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
-                          VNodeIndex* vnode_index, KvStore* kv,
-                          WalManager* wal, ReplicationMaster* repl = nullptr);
+// Apply a write command (SET/DEL/VSET/VDEL) from RequestContext.
+// For kClient: encodes RESP once, appends to wal and feeds replication backlog.
+ApplyResult ApplyMutation(const RequestContext& ctx, MutateSource src,
+                          VNodeIndex* vnode_index, KvStore* kv, WalManager* wal,
+                          ReplicationMaster* repl = nullptr);

@@ -1,6 +1,5 @@
 #include "vemory/protocol/dispatcher/KvsDispatcher.h"
 
-#include "WalEntry.pb.h"
 #include "vemory/mutate/MutationApply.h"
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/dispatcher/DispatchArgs.h"
@@ -20,12 +19,8 @@ void KvsDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
 
   switch (ctx.cmd) {
     case CommandType::kSet: {
-      vemory::WalEntry entry;
-      entry.set_op(vemory::WalEntry::SET);
-      entry.set_key(ctx.key);
-      entry.set_value(ctx.element);
       const auto ar =
-          ApplyMutation(entry, MutateSource::kClient, /*vnode_index=*/nullptr,
+          ApplyMutation(ctx, MutateSource::kClient, /*vnode_index=*/nullptr,
                         store, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);
@@ -49,11 +44,8 @@ void KvsDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       break;
     }
     case CommandType::kDel: {
-      vemory::WalEntry entry;
-      entry.set_op(vemory::WalEntry::DEL);
-      entry.set_key(ctx.key);
       const auto ar =
-          ApplyMutation(entry, MutateSource::kClient, /*vnode_index=*/nullptr,
+          ApplyMutation(ctx, MutateSource::kClient, /*vnode_index=*/nullptr,
                         store, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);

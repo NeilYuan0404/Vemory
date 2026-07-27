@@ -6,10 +6,10 @@
 #include <filesystem>
 #include <string>
 
-#include "WalEntry.pb.h"
 #include "vemory/persist/SnapshotManager.h"
 #include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/RequestContext.h"
+#include "vemory/protocol/resp/RespEncode.h"
 #include "vemory/replication/ReplicationBacklog.h"
 #include "vemory/replication/ReplicationSlave.h"
 #include "vemory/storage/KvStore.h"
@@ -39,6 +39,16 @@ class TempDir {
  private:
   std::string path_;
 };
+
+std::string EncodeSet(const std::string& key, const std::string& val) {
+  RequestContext ctx;
+  ctx.cmd = CommandType::kSet;
+  ctx.key = key;
+  ctx.element = val;
+  std::string frame;
+  EXPECT_TRUE(RespEncode::EncodeWriteCommand(ctx, &frame));
+  return frame;
+}
 
 }  // namespace
 
@@ -78,17 +88,14 @@ TEST(ReplicationBacklog, FeedAndCopyRange) {
   ReplicationBacklog bl(1024);
   const uint64_t start = bl.tip();
 
-  vemory::WalEntry e;
-  e.set_op(vemory::WalEntry::SET);
-  e.set_key("k");
-  e.set_value("v");
-  ASSERT_TRUE(bl.Feed(e));
+  const std::string frame = EncodeSet("k", "v");
+  ASSERT_TRUE(bl.FeedEncoded(frame));
   ASSERT_GT(bl.tip(), start);
   ASSERT_TRUE(bl.Contains(start));
 
   std::string out;
   ASSERT_TRUE(bl.CopyRange(start, bl.tip(), &out));
-  ASSERT_GE(out.size(), 4u);
+  EXPECT_EQ(out, frame);
 
   std::string empty;
   ASSERT_TRUE(bl.CopyRange(bl.tip(), bl.tip(), &empty));
@@ -99,13 +106,9 @@ TEST(ReplicationBacklog, OverflowAdvancesBase) {
   ReplicationBacklog bl(64);
   const uint64_t start = bl.tip();
   for (int i = 0; i < 20; ++i) {
-    vemory::WalEntry e;
-    e.set_op(vemory::WalEntry::SET);
-    e.set_key("key-" + std::to_string(i));
-    e.set_value(std::string(16, 'x'));
-    ASSERT_TRUE(bl.Feed(e));
+    ASSERT_TRUE(bl.FeedEncoded(
+        EncodeSet("key-" + std::to_string(i), std::string(16, 'x'))));
   }
-  // Early offset should eventually fall out.
   EXPECT_FALSE(bl.Contains(start));
   EXPECT_TRUE(bl.Contains(bl.base()));
   EXPECT_TRUE(bl.Contains(bl.tip()));
@@ -113,12 +116,7 @@ TEST(ReplicationBacklog, OverflowAdvancesBase) {
 
 TEST(ReplicationBacklog, FeedEncodedRoundTrip) {
   ReplicationBacklog bl(1024);
-  vemory::WalEntry e;
-  e.set_op(vemory::WalEntry::SET);
-  e.set_key("x");
-  e.set_value("y");
-  std::string frame;
-  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e, &frame));
+  const std::string frame = EncodeSet("x", "y");
   const uint64_t start = bl.tip();
   ASSERT_TRUE(bl.FeedEncoded(frame));
   std::string out;
@@ -137,12 +135,7 @@ TEST(ReplicationSlave, NextBackoffMs) {
 TEST(ReplicationSlave, ConsumeStreamFrames_BytesConsumed) {
   VNodeIndex idx(16);
   KvStore kv;
-  vemory::WalEntry e;
-  e.set_op(vemory::WalEntry::SET);
-  e.set_key("c");
-  e.set_value("3");
-  std::string frame;
-  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e, &frame));
+  const std::string frame = EncodeSet("c", "3");
   std::string buf = frame;
   std::string err;
   std::size_t consumed = 0;
@@ -156,22 +149,10 @@ TEST(ReplicationSlave, ConsumeStreamFrames_PartialAndMulti) {
   VNodeIndex idx(16);
   KvStore kv;
 
-  vemory::WalEntry e1;
-  e1.set_op(vemory::WalEntry::SET);
-  e1.set_key("a");
-  e1.set_value("1");
-  vemory::WalEntry e2;
-  e2.set_op(vemory::WalEntry::SET);
-  e2.set_key("b");
-  e2.set_value("2");
-
-  std::string f1;
-  std::string f2;
-  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e1, &f1));
-  ASSERT_TRUE(ReplicationBacklog::EncodeFrame(e2, &f2));
+  const std::string f1 = EncodeSet("a", "1");
+  const std::string f2 = EncodeSet("b", "2");
 
   std::string buf = f1 + f2;
-  // Truncate last byte → one complete frame + partial.
   buf.pop_back();
   std::string err;
   ASSERT_TRUE(
@@ -196,7 +177,6 @@ TEST(SnapshotManager, SaveToPathWithoutPersistenceDir) {
   KvStore kv;
   ASSERT_EQ(kv.Set("a", "b"), KvStore::Status::kOk);
 
-  // Empty persistence dir — SAVE disabled, but path API still works.
   SnapshotManager snap(&idx, &kv, "");
   EXPECT_FALSE(snap.configured());
   EXPECT_EQ(snap.BackgroundSave(), SnapshotManager::Status::kNotConfigured);

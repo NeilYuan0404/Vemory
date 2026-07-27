@@ -1,5 +1,4 @@
 CXX      := g++
-PROTOC  := protoc
 
 # Build mode: release (default) | debug | test
 #   release — -O2 -DNDEBUG, bin/vemory
@@ -34,14 +33,10 @@ SPDLOG_ROOT   := third_party/spdlog
 SPDLOG_HEADER := $(SPDLOG_ROOT)/include/spdlog/spdlog.h
 SPDLOG_INC    := -I $(SPDLOG_ROOT)/include
 
-CXXFLAGS := -std=c++17 -Wall -Wextra $(MODE_FLAGS) -I include -I generated $(USEARCH_INC) $(SPDLOG_INC)
-PROTOBUF_LIBS := $(shell pkg-config --libs protobuf 2>/dev/null)
-ifeq ($(PROTOBUF_LIBS),)
-PROTOBUF_LIBS := -lprotobuf
-endif
-LDFLAGS  := $(PROTOBUF_LIBS)
+CXXFLAGS := -std=c++17 -Wall -Wextra $(MODE_FLAGS) -I include $(USEARCH_INC) $(SPDLOG_INC)
+LDFLAGS  :=
 
-# Global heap via vendored gperftools tcmalloc_minimal (STL/protobuf/new).
+# Global heap via vendored gperftools tcmalloc_minimal (STL/new).
 # Source under third_party/gperftools (make gperftools-fetch); built into prefix/ on demand.
 # usearch mmap is unchanged. Disable with TCMALLOC=0.
 GPERFTOOLS_TAG    := gperftools-2.15
@@ -70,10 +65,6 @@ else
   CXXFLAGS += -DVEMORY_HAVE_LIBURING=0
 endif
 
-PROTO_SRC := proto/VNode.proto proto/WalEntry.proto
-PROTO_GEN_CC := generated/VNode.pb.cc generated/WalEntry.pb.cc
-PROTO_GEN_H  := generated/VNode.pb.h generated/WalEntry.pb.h
-
 SRC := $(wildcard src/net/*.cc) \
        $(wildcard src/util/*.cc) \
        $(wildcard src/protocol/*.cc) \
@@ -84,9 +75,7 @@ SRC := $(wildcard src/net/*.cc) \
        $(wildcard src/index/*.cc) \
        $(wildcard src/replication/*.cc)
 
-OBJ := $(SRC:src/%.cc=$(BUILD_ROOT)/%.o) \
-       $(BUILD_ROOT)/generated/VNode.pb.o \
-       $(BUILD_ROOT)/generated/WalEntry.pb.o
+OBJ := $(SRC:src/%.cc=$(BUILD_ROOT)/%.o)
 
 MAIN_SRC := src/Vemory.cc
 MAIN_BIN := bin/vemory
@@ -108,7 +97,7 @@ UNIT_BIN  := bin/unit_tests
 
 .PHONY: all clean run test debug release testcase gtest-fetch usearch-fetch \
         spdlog-fetch gperftools-fetch gperftools-build gperftools-clean \
-        compile-commands proto
+        compile-commands
 
 ifeq ($(MODE),test)
 all: $(TEST_BIN)
@@ -186,13 +175,6 @@ $(GPERFTOOLS_LIB): $(GPERFTOOLS_CONF)
 gperftools-clean:
 	rm -rf $(GPERFTOOLS_ROOT)/.build $(GPERFTOOLS_PREFIX)
 
-proto: $(PROTO_GEN_CC) $(PROTO_GEN_H)
-
-$(PROTO_GEN_CC) $(PROTO_GEN_H): $(PROTO_SRC)
-	@mkdir -p generated
-	$(PROTOC) -I proto --cpp_out=generated proto/VNode.proto
-	$(PROTOC) -I proto --cpp_out=generated proto/WalEntry.proto
-
 compile-commands:
 	python3 scripts/gen_compile_commands.py
 
@@ -213,17 +195,9 @@ $(MAIN_BIN): $(OBJ) $(MAIN_SRC) $(TCMALLOC_DEP) | bin
 $(TEST_BIN): $(OBJ) $(TEST_SRC) $(TCMALLOC_DEP) | bin
 	$(CXX) $(CXXFLAGS) $(OBJ) $(TEST_SRC) -o $@ $(LDFLAGS)
 
-$(BUILD_ROOT)/%.o: src/%.cc $(PROTO_GEN_H) $(USEARCH_HEADER) $(SPDLOG_HEADER)
+$(BUILD_ROOT)/%.o: src/%.cc $(USEARCH_HEADER) $(SPDLOG_HEADER)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD_ROOT)/generated/VNode.pb.o: generated/VNode.pb.cc generated/VNode.pb.h
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c generated/VNode.pb.cc -o $@
-
-$(BUILD_ROOT)/generated/WalEntry.pb.o: generated/WalEntry.pb.cc generated/WalEntry.pb.h
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c generated/WalEntry.pb.cc -o $@
 
 build/gtest/gtest-all.o: $(GTEST_DIR)/src/gtest-all.cc
 	@mkdir -p $(dir $@)
@@ -233,7 +207,7 @@ build/gtest/gtest_main.o: $(GTEST_DIR)/src/gtest_main.cc
 	@mkdir -p $(dir $@)
 	$(CXX) -std=c++17 -g -I $(GTEST_DIR)/include -I $(GTEST_DIR) -pthread -c $< -o $@
 
-build/unit/%.o: tests/unit/%.cc $(PROTO_GEN_H) $(USEARCH_HEADER) $(SPDLOG_HEADER) $(GTEST_DIR)/src/gtest-all.cc
+build/unit/%.o: tests/unit/%.cc $(USEARCH_HEADER) $(SPDLOG_HEADER) $(GTEST_DIR)/src/gtest-all.cc
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(GTEST_INC) -pthread -c $< -o $@
 

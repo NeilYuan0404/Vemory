@@ -10,7 +10,7 @@
 
 // In-memory store: key = assigned uint16 id, value = owned VNode.
 // Also indexes user_key → id for VDEL.
-// Serialization (ProtobufVNodeCodec) is for replication / snapshot, not Put/Get.
+// Serialization (RespVNodeCodec) is for snapshot / replication RDB, not Put/Get.
 class VNodeStorage {
  public:
   enum class Status : uint8_t {

@@ -5,23 +5,14 @@
 #include <cstring>
 #include <filesystem>
 #include <system_error>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 
-#include "WalEntry.pb.h"
 #include "vemory/mutate/MutationApply.h"
 #include "vemory/net/TcpConnector.h"
-
-namespace {
-
-uint32_t ReadU32Le(const unsigned char in[4]) {
-  return static_cast<uint32_t>(in[0]) |
-         (static_cast<uint32_t>(in[1]) << 8) |
-         (static_cast<uint32_t>(in[2]) << 16) |
-         (static_cast<uint32_t>(in[3]) << 24);
-}
-
-}  // namespace
+#include "vemory/protocol/RequestContext.h"
+#include "vemory/protocol/resp/RespDecode.h"
 
 ReplicationSlave::ReplicationSlave(EventLoop* loop, SnapshotManager* snapshot,
                                    VNodeIndex* vnode_index, KvStore* kv)
@@ -331,30 +322,41 @@ bool ReplicationSlave::ConsumeStreamFrames(std::string* bytes,
     return false;
   }
   std::size_t off = 0;
-  while (off + 4 <= bytes->size()) {
-    unsigned char len_buf[4];
-    std::memcpy(len_buf, bytes->data() + off, 4);
-    const uint32_t plen = ReadU32Le(len_buf);
-    if (off + 4 + plen > bytes->size()) {
+  std::vector<std::string_view> tokens;
+  while (off < bytes->size()) {
+    std::size_t consumed = 0;
+    tokens.clear();
+    const auto st = RespDecode::DecodeArrayOfBulk(
+        bytes->data() + off, bytes->size() - off, &tokens, &consumed);
+    if (st == RespDecode::Status::kNeedMore) {
       break;  // partial frame
     }
-    off += 4;
-    vemory::WalEntry entry;
-    if (!entry.ParseFromArray(bytes->data() + off, static_cast<int>(plen))) {
+    if (st != RespDecode::Status::kOk) {
       if (err != nullptr) {
-        *err = "bad wal protobuf";
+        *err = "bad RESP command frame";
       }
       return false;
     }
-    off += plen;
-    const auto r = ApplyMutation(entry, MutateSource::kAofReplay, vnode_index,
-                                 kv, nullptr);
+
+    RequestContext ctx;
+    const auto fs =
+        RequestContext::FromTokens(/*client_fd=*/-1, tokens, &ctx);
+    if (fs != RequestContext::Status::kOk) {
+      if (err != nullptr) {
+        *err = "bad command in stream";
+      }
+      return false;
+    }
+
+    const auto r = ApplyMutation(ctx, MutateSource::kAofReplay, vnode_index, kv,
+                                 nullptr);
     if (!r.ok) {
       if (err != nullptr) {
         *err = "apply: " + r.err;
       }
       return false;
     }
+    off += consumed;
   }
   if (off > 0) {
     bytes->erase(0, off);

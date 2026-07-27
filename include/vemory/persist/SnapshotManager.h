@@ -61,7 +61,7 @@ class SnapshotManager {
   };
 
   struct Header {
-    uint32_t version = 2;
+    uint32_t version = 3;
     uint32_t flags = 0;
     uint64_t dim = 0;
     uint32_t next_id = 1;
@@ -72,7 +72,7 @@ class SnapshotManager {
   };
 
   static constexpr const char* kMagic = "VEMORYDB";
-  static constexpr uint32_t kVersion = 2;
+  static constexpr uint32_t kVersion = 3;
   static constexpr const char* kRdbName = "dump.rdb";
   // magic(8) + version(4) + flags(4) + dim(8) + next_id(4) + pad(4) +
   // kv_count(8) + node_count(8) + toc[3]*(8+8) = 96

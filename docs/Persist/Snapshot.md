@@ -40,7 +40,7 @@ Under `dir`, a single file `dump.rdb`:
 dump.rdb
   Header (96 bytes)
     magic[8] = "VEMORYDB"
-    version   u32 = 2
+    version   u32 = 3
     flags     u32   // bit0: has_usearch
     dim       u64
     next_id   u32
@@ -55,12 +55,12 @@ dump.rdb
 | Segment | Content |
 |---------|---------|
 | KV | KvStore binary (`KvStore::Dump` / `Load`) |
-| NODES | length-prefixed `VNodePb` via `ProtobufVNodeCodec` (no vectors) |
+| NODES | length-prefixed RESP Array via `RespVNodeCodec` (`[id, user_key, question, answer]`; no vectors) |
 | USEARCH | usearch native bytes (`USearchEmbedIndex::Save` / `Load` on `FILE*`); omitted when `dim == 0` (`toc[2].length = 0`) |
 
 Write path: write `dump.rdb.tmp` (header reserved, then payloads, then rewrite header/TOC) → `fflush`/`fsync` → `rename` to `dump.rdb`. Successful SAVE also removes legacy multi-file names (`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch` and `.tmp`).
 
-Format is Vemory-specific (not Redis RDB-compatible). Old multi-file snapshots are not loaded. Optional protobuf AOF: [`Aof.md`](Aof.md) (`persistence.aof`).
+Format is Vemory-specific (not Redis RDB-compatible). **RDB v3 only** (v2 protobuf NODES not loaded). Optional RESP AOF: [`Aof.md`](Aof.md) (`persistence.aof`).
 
 Wire: `redis-cli SAVE` (default dir `data/`; empty `persistence.dir` disables).
 

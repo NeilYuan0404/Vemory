@@ -3,10 +3,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
-#include "WalEntry.pb.h"
 #include "vemory/net/TcpConnection.h"
 #include "vemory/persist/SnapshotManager.h"
 #include "vemory/replication/ReplicationBacklog.h"
@@ -29,17 +29,13 @@ class ReplicationMaster {
 
   explicit ReplicationMaster(SnapshotManager* snapshot);
 
-  // Track accepted connections so PSYNC can resolve client_fd → TcpConn.
   void OnConnection(TcpConn::Ptr conn);
 
-  // Called from PSYNC dispatcher; reply may be empty (async transfer).
-  // On immediate error, writes RESP error into *reply.
-  // replid empty / "?" with offset < 0 → fullsync; else try partial.
   void OnPsync(int client_fd, const std::string& replid, int64_t offset,
                std::string* reply);
 
-  // Feed a successful client mutation into the backlog (always retained).
-  void FeedBacklog(const vemory::WalEntry& entry);
+  // Feed a pre-encoded RESP write-command frame into the backlog.
+  void FeedEncodedFrame(std::string_view frame);
 
   bool has_slaves() const { return !slaves_.empty(); }
   bool fullsync_active() const { return fullsync_active_; }

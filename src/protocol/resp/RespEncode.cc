@@ -2,6 +2,9 @@
 
 #include <cstdio>
 
+#include "vemory/protocol/CommandType.h"
+#include "vemory/protocol/RequestContext.h"
+
 namespace {
 
 void AppendCRLF(std::string* out) { out->append("\r\n", 2); }
@@ -54,4 +57,40 @@ void RespEncode::AppendArrayHeader(std::string* out, int64_t n) {
 
 void RespEncode::AppendOk(std::string* out) {
   out->append("+OK\r\n", 5);
+}
+
+bool RespEncode::EncodeWriteCommand(const RequestContext& ctx,
+                                    std::string* out) {
+  if (out == nullptr) {
+    return false;
+  }
+  out->clear();
+  switch (ctx.cmd) {
+    case CommandType::kSet:
+      AppendArrayHeader(out, 3);
+      AppendBulkString(out, "SET");
+      AppendBulkString(out, ctx.key);
+      AppendBulkString(out, ctx.element);
+      return true;
+    case CommandType::kDel:
+      AppendArrayHeader(out, 2);
+      AppendBulkString(out, "DEL");
+      AppendBulkString(out, ctx.key);
+      return true;
+    case CommandType::kVset:
+      AppendArrayHeader(out, 5);
+      AppendBulkString(out, "VSET");
+      AppendBulkString(out, ctx.vector_blob);
+      AppendBulkString(out, ctx.user_key);
+      AppendBulkString(out, ctx.question);
+      AppendBulkString(out, ctx.answer);
+      return true;
+    case CommandType::kVdel:
+      AppendArrayHeader(out, 2);
+      AppendBulkString(out, "VDEL");
+      AppendBulkString(out, ctx.user_key);
+      return true;
+    default:
+      return false;
+  }
 }

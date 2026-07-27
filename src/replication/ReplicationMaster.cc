@@ -127,12 +127,7 @@ void ReplicationMaster::OnPsync(int client_fd, const std::string& replid,
   // Async: +FULLRESYNC sent when RDB is ready.
 }
 
-void ReplicationMaster::FeedBacklog(const vemory::WalEntry& entry) {
-  std::string frame;
-  if (!ReplicationBacklog::EncodeFrame(entry, &frame)) {
-    spdlog::warn("replication backlog encode failed");
-    return;
-  }
+void ReplicationMaster::FeedEncodedFrame(std::string_view frame) {
   if (!backlog_.FeedEncoded(frame)) {
     spdlog::warn("replication backlog feed failed");
     return;

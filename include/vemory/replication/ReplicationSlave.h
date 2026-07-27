@@ -53,7 +53,7 @@ class ReplicationSlave {
   // Double current backoff, capped at kMaxBackoffMs.
   static uint64_t NextBackoffMs(uint64_t current_ms);
 
-  // Parse and apply zero or more complete u32le+WalEntry frames from *bytes.
+  // Parse and apply zero or more complete RESP write commands from *bytes.
   // Consumes complete frames from the front of *bytes; leaves a partial frame.
   // On success, *bytes_consumed (if non-null) is set to erased byte count.
   // Returns false on corrupt frame.

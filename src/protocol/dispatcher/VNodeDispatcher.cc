@@ -1,6 +1,5 @@
 #include "vemory/protocol/dispatcher/VNodeDispatcher.h"
 
-#include "WalEntry.pb.h"
 #include "vemory/mutate/MutationApply.h"
 #include "vemory/protocol/dispatcher/DispatchArgs.h"
 #include "vemory/protocol/resp/RespEncode.h"
@@ -19,13 +18,7 @@ void VNodeDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
 
   switch (ctx.cmd) {
     case CommandType::kVset: {
-      vemory::WalEntry entry;
-      entry.set_op(vemory::WalEntry::VSET);
-      entry.set_user_key(ctx.user_key);
-      entry.set_question(ctx.question);
-      entry.set_answer(ctx.answer);
-      entry.set_vector(ctx.vector_blob);
-      const auto ar = ApplyMutation(entry, MutateSource::kClient, index,
+      const auto ar = ApplyMutation(ctx, MutateSource::kClient, index,
                                     /*kv=*/nullptr, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);
@@ -46,10 +39,7 @@ void VNodeDispatcher(const RequestContext& ctx, std::string* reply, void* arg) {
       break;
     }
     case CommandType::kVdel: {
-      vemory::WalEntry entry;
-      entry.set_op(vemory::WalEntry::VDEL);
-      entry.set_user_key(ctx.user_key);
-      const auto ar = ApplyMutation(entry, MutateSource::kClient, index,
+      const auto ar = ApplyMutation(ctx, MutateSource::kClient, index,
                                     /*kv=*/nullptr, args->wal, args->repl);
       if (!ar.ok) {
         RespEncode::AppendError(reply, "ERR " + ar.err);

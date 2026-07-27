@@ -5,6 +5,7 @@ All notable changes to Vemory are documented in this file.
 ## [Unreleased]
 
 ### Changed
+- AOF / replication / RDB NODES: drop protobuf; use RESP write commands (vectors as bulk bytes). RDB version 3. Remove `protoc` / `libprotobuf` build dependency.
 - Docs/README polish: drop stale “future replication” / MVP wording; semantic-cache naming; CI workflow; README badges
 
 ## [1.0.0] — 2026-07-27

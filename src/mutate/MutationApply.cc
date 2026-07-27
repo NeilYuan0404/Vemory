@@ -1,40 +1,41 @@
 #include "vemory/mutate/MutationApply.h"
 
 #include "vemory/persist/WalManager.h"
+#include "vemory/protocol/CommandType.h"
+#include "vemory/protocol/resp/RespEncode.h"
 #include "vemory/replication/ReplicationMaster.h"
 
-ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
-                          VNodeIndex* vnode_index, KvStore* kv,
-                          WalManager* wal, ReplicationMaster* repl) {
+ApplyResult ApplyMutation(const RequestContext& ctx, MutateSource src,
+                          VNodeIndex* vnode_index, KvStore* kv, WalManager* wal,
+                          ReplicationMaster* repl) {
   ApplyResult out;
-  bool should_append = true;
 
-  switch (entry.op()) {
-    case vemory::WalEntry::SET: {
+  switch (ctx.cmd) {
+    case CommandType::kSet: {
       if (kv == nullptr) {
         out.err = "kv not available";
         return out;
       }
-      if (entry.key().empty()) {
+      if (ctx.key.empty()) {
         out.err = "empty key";
         return out;
       }
-      if (kv->Set(entry.key(), entry.value()) != KvStore::Status::kOk) {
+      if (kv->Set(ctx.key, ctx.element) != KvStore::Status::kOk) {
         out.err = "set failed";
         return out;
       }
       break;
     }
-    case vemory::WalEntry::DEL: {
+    case CommandType::kDel: {
       if (kv == nullptr) {
         out.err = "kv not available";
         return out;
       }
-      if (entry.key().empty()) {
+      if (ctx.key.empty()) {
         out.err = "empty key";
         return out;
       }
-      const auto st = kv->Del(entry.key());
+      const auto st = kv->Del(ctx.key);
       if (st == KvStore::Status::kNotFound) {
         out.ok = true;
         out.integer_reply = 0;
@@ -47,13 +48,13 @@ ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
       out.integer_reply = 1;
       break;
     }
-    case vemory::WalEntry::VSET: {
+    case CommandType::kVset: {
       if (vnode_index == nullptr) {
         out.err = "index not available";
         return out;
       }
-      const auto st = vnode_index->Set(entry.vector(), entry.user_key(),
-                                       entry.question(), entry.answer());
+      const auto st = vnode_index->Set(ctx.vector_blob, ctx.user_key,
+                                       ctx.question, ctx.answer);
       switch (st) {
         case VNodeIndex::Status::kOk:
           break;
@@ -75,12 +76,12 @@ ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
       }
       break;
     }
-    case vemory::WalEntry::VDEL: {
+    case CommandType::kVdel: {
       if (vnode_index == nullptr) {
         out.err = "index not available";
         return out;
       }
-      const auto st = vnode_index->Del(entry.user_key());
+      const auto st = vnode_index->Del(ctx.user_key);
       if (st == VNodeIndex::Status::kNotFound) {
         out.ok = true;
         out.integer_reply = 0;
@@ -94,20 +95,26 @@ ApplyResult ApplyMutation(const vemory::WalEntry& entry, MutateSource src,
       break;
     }
     default:
-      out.err = "unknown wal op";
+      out.err = "unknown write command";
       return out;
   }
 
-  if (should_append && src == MutateSource::kClient && wal != nullptr &&
-      wal->enabled()) {
-    if (wal->Append(entry) != WalManager::Status::kOk) {
-      out.err = "aof append failed";
+  if (src == MutateSource::kClient &&
+      ((wal != nullptr && wal->enabled()) || repl != nullptr)) {
+    std::string frame;
+    if (!RespEncode::EncodeWriteCommand(ctx, &frame)) {
+      out.err = "encode write command failed";
       return out;
     }
-  }
-
-  if (should_append && src == MutateSource::kClient && repl != nullptr) {
-    repl->FeedBacklog(entry);
+    if (wal != nullptr && wal->enabled()) {
+      if (wal->AppendFrame(frame) != WalManager::Status::kOk) {
+        out.err = "aof append failed";
+        return out;
+      }
+    }
+    if (repl != nullptr) {
+      repl->FeedEncodedFrame(frame);
+    }
   }
 
   out.ok = true;

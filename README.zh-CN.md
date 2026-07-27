@@ -13,7 +13,6 @@
 ## 依赖
 
 - C++17 工具链（`g++`）
-- [Protocol Buffers](https://protobuf.dev/)（`protoc`、`libprotobuf`）——AOF / 复制 `WalEntry` 帧
 - 已内置 [gperftools](https://github.com/gperftools/gperftools)，位于 `third_party/gperftools`——默认全局堆（`libtcmalloc_minimal`，`make` 时静态链接）；可用 `make gperftools-fetch` 刷新。usearch 仍使用自有 `mmap` arena。`TCMALLOC=0` 可关闭。
 - 已内置 [usearch](https://github.com/unum-cloud/usearch)，位于 `third_party/usearch`（可用 `make usearch-fetch` 刷新）
 - 已内置 [spdlog](https://github.com/gabime/spdlog)，位于 `third_party/spdlog`（可用 `make spdlog-fetch` 刷新）
@@ -173,7 +172,6 @@ ECHO（vemory_no_repl）：**13698.63** rps
 |--------|---------|
 | `make run` | 构建并启动 `bin/vemory` |
 | `make test` | GoogleTest 单元测试（`bin/unit_tests`） |
-| `make proto` | 重新生成 `generated/VNode.pb.*` |
 | `make gperftools-fetch` | 重新拉取 gperftools 源码到 `third_party/gperftools` |
 | `make gperftools-clean` | 删除 gperftools 的 build/`prefix`（保留源码） |
 | `make compile-commands` | 刷新 `compile_commands.json`（供 clangd） |
@@ -220,4 +218,4 @@ client
 | 复制 / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
 | 嵌入索引 / 语义缓存 ANN | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
-目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`、`replication/`），schema 在 `proto/`（`VNode.proto`、`WalEntry.proto`）。
+目录布局：公开头文件在 `include/vemory/`，源码在 `src/`（含 `persist/`、`replication/`）。

@@ -6,9 +6,9 @@
 
 #include "vemory/storage/VNode.h"
 
-// Protobuf codec for VNode ↔ bytes (replication / future persist).
-// Not used by VNodeStorage Put/Get.
-class ProtobufVNodeCodec {
+// RESP codec for VNode ↔ bytes (RDB NODES section).
+// Encodes as array of 4 bulks: [id_decimal, user_key, question, answer].
+class RespVNodeCodec {
  public:
   enum class Status : uint8_t {
     kOk = 0,

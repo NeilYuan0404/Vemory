@@ -6,11 +6,12 @@
 #include <string>
 #include <vector>
 
-#include "WalEntry.pb.h"
 #include "vemory/mutate/MutationApply.h"
 #include "vemory/persist/WalManager.h"
+#include "vemory/protocol/CommandType.h"
 #include "vemory/protocol/dispatcher/CommandHandler.h"
 #include "vemory/protocol/RequestContext.h"
+#include "vemory/protocol/resp/RespEncode.h"
 #include "vemory/storage/KvStore.h"
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Config.h"
@@ -45,6 +46,31 @@ class TempDir {
   std::string path_;
 };
 
+RequestContext MakeSet(const std::string& key, const std::string& val) {
+  RequestContext ctx;
+  ctx.cmd = CommandType::kSet;
+  ctx.key = key;
+  ctx.element = val;
+  return ctx;
+}
+
+RequestContext MakeVset(const std::string& blob, const std::string& uk,
+                        const std::string& q, const std::string& a) {
+  RequestContext ctx;
+  ctx.cmd = CommandType::kVset;
+  ctx.vector_blob = blob;
+  ctx.user_key = uk;
+  ctx.question = q;
+  ctx.answer = a;
+  return ctx;
+}
+
+std::string EncodeSet(const std::string& key, const std::string& val) {
+  std::string frame;
+  EXPECT_TRUE(RespEncode::EncodeWriteCommand(MakeSet(key, val), &frame));
+  return frame;
+}
+
 // > kMaxBatch (32) so flush covers at least one full batch plus a remainder.
 void AppendManyFlushReplay(vemory::AofIoMode io_mode) {
   constexpr int kCount = 40;
@@ -57,11 +83,9 @@ void AppendManyFlushReplay(vemory::AofIoMode io_mode) {
     EXPECT_EQ(wal.io_mode(), io_mode);
 
     for (int i = 0; i < kCount; ++i) {
-      vemory::WalEntry e;
-      e.set_op(vemory::WalEntry::SET);
-      e.set_key("k" + std::to_string(i));
-      e.set_value("v" + std::to_string(i));
-      ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+      ASSERT_EQ(wal.AppendFrame(EncodeSet("k" + std::to_string(i),
+                                          "v" + std::to_string(i))),
+                WalManager::Status::kOk);
     }
     ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
   }
@@ -81,23 +105,12 @@ void AppendManyFlushReplay(vemory::AofIoMode io_mode) {
 
 }  // namespace
 
-TEST(WalEntry, ProtobufRoundTrip) {
-  vemory::WalEntry in;
-  in.set_op(vemory::WalEntry::VSET);
-  in.set_user_key("uk");
-  in.set_question("q");
-  in.set_answer("a");
-  in.set_vector(FloatBlob({1.f, 0.f, 0.f}));
-
-  std::string bytes;
-  ASSERT_TRUE(in.SerializeToString(&bytes));
-
-  vemory::WalEntry out;
-  ASSERT_TRUE(out.ParseFromString(bytes));
-  EXPECT_EQ(out.op(), vemory::WalEntry::VSET);
-  EXPECT_EQ(out.user_key(), "uk");
-  EXPECT_EQ(out.answer(), "a");
-  EXPECT_EQ(out.vector().size(), 3 * sizeof(float));
+TEST(RespEncode, EncodeWriteCommandRoundTrip) {
+  auto ctx = MakeVset(FloatBlob({1.f, 0.f, 0.f}), "uk", "q", "a");
+  std::string frame;
+  ASSERT_TRUE(RespEncode::EncodeWriteCommand(ctx, &frame));
+  EXPECT_FALSE(frame.empty());
+  EXPECT_EQ(frame[0], '*');
 }
 
 TEST(WalManager, AppendReplayRoundTrip) {
@@ -107,22 +120,11 @@ TEST(WalManager, AppendReplayRoundTrip) {
   {
     WalManager wal(&idx, &kv, dir.path(), /*enable=*/true);
 
-    {
-      vemory::WalEntry e;
-      e.set_op(vemory::WalEntry::SET);
-      e.set_key("k1");
-      e.set_value("v1");
-      ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
-    }
-    {
-      vemory::WalEntry e;
-      e.set_op(vemory::WalEntry::VSET);
-      e.set_user_key("uk1");
-      e.set_question("q1");
-      e.set_answer("ans1");
-      e.set_vector(FloatBlob({1.f, 0.f, 0.f}));
-      ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
-    }
+    ASSERT_EQ(wal.AppendFrame(EncodeSet("k1", "v1")), WalManager::Status::kOk);
+    std::string vset;
+    ASSERT_TRUE(RespEncode::EncodeWriteCommand(
+        MakeVset(FloatBlob({1.f, 0.f, 0.f}), "uk1", "q1", "ans1"), &vset));
+    ASSERT_EQ(wal.AppendFrame(std::move(vset)), WalManager::Status::kOk);
     ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
   }
 
@@ -149,11 +151,8 @@ TEST(WalManager, ReplayDoesNotReAppend) {
   {
     WalManager wal(&idx, &kv, dir.path(), true);
 
-    vemory::WalEntry e;
-    e.set_op(vemory::WalEntry::SET);
-    e.set_key("only");
-    e.set_value("once");
-    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    ASSERT_EQ(wal.AppendFrame(EncodeSet("only", "once")),
+              WalManager::Status::kOk);
     ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
 
     size_before = std::filesystem::file_size(dir.path() + "/appendonly.aof");
@@ -181,20 +180,13 @@ TEST(WalManager, ClientPathViaHandler) {
     WalManager wal(&idx, &kv, dir.path(), true);
     CommandHandler commands(&idx, &kv, /*snapshot=*/nullptr, &wal);
 
-    RequestContext set_ctx;
-    set_ctx.cmd = CommandType::kSet;
-    set_ctx.key = "hello";
-    set_ctx.element = "world";
+    RequestContext set_ctx = MakeSet("hello", "world");
     std::string reply;
     commands.Dispatch(set_ctx, &reply);
     EXPECT_EQ(reply, "+OK\r\n");
 
-    RequestContext vset_ctx;
-    vset_ctx.cmd = CommandType::kVset;
-    vset_ctx.vector_blob = FloatBlob({0.f, 1.f, 0.f});
-    vset_ctx.user_key = "u1";
-    vset_ctx.question = "q";
-    vset_ctx.answer = "a";
+    RequestContext vset_ctx =
+        MakeVset(FloatBlob({0.f, 1.f, 0.f}), "u1", "q", "a");
     reply.clear();
     commands.Dispatch(vset_ctx, &reply);
     EXPECT_EQ(reply, "+OK\r\n");
@@ -224,11 +216,9 @@ TEST(WalManager, MultipleAppendFlush) {
   WalManager wal(&idx, &kv, dir.path(), true);
 
   for (int i = 0; i < 8; ++i) {
-    vemory::WalEntry e;
-    e.set_op(vemory::WalEntry::SET);
-    e.set_key("k" + std::to_string(i));
-    e.set_value("v" + std::to_string(i));
-    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    ASSERT_EQ(wal.AppendFrame(EncodeSet("k" + std::to_string(i),
+                                        "v" + std::to_string(i))),
+              WalManager::Status::kOk);
   }
   ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
 
@@ -274,11 +264,7 @@ TEST(WalManager, AlwaysFsyncFlushOk) {
   EXPECT_EQ(wal.fsync_policy(), vemory::AofFsyncPolicy::kAlways);
   EXPECT_EQ(wal.io_mode(), vemory::AofIoMode::kThread);
 
-  vemory::WalEntry e;
-  e.set_op(vemory::WalEntry::SET);
-  e.set_key("k");
-  e.set_value("v");
-  ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+  ASSERT_EQ(wal.AppendFrame(EncodeSet("k", "v")), WalManager::Status::kOk);
   ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
 }
 
@@ -289,14 +275,10 @@ TEST(WalManager, IoUringAppendReplayOrFallback) {
   {
     WalManager wal(&idx, &kv, dir.path(), /*enable=*/true,
                    vemory::AofFsyncPolicy::kNo, vemory::AofIoMode::kIoUring);
-    // Requested iouring; may fall back to thread if liburing/kernel unavailable.
     EXPECT_EQ(wal.io_mode(), vemory::AofIoMode::kIoUring);
 
-    vemory::WalEntry e;
-    e.set_op(vemory::WalEntry::SET);
-    e.set_key("uring");
-    e.set_value("ok");
-    ASSERT_EQ(wal.Append(e), WalManager::Status::kOk);
+    ASSERT_EQ(wal.AppendFrame(EncodeSet("uring", "ok")),
+              WalManager::Status::kOk);
     ASSERT_EQ(wal.Flush(), WalManager::Status::kOk);
   }
 
@@ -315,6 +297,5 @@ TEST(WalManager, ThreadBatchAppendReplay) {
 }
 
 TEST(WalManager, IoUringBatchAppendReplayOrFallback) {
-  // May fall back to thread writer if liburing/kernel unavailable.
   AppendManyFlushReplay(vemory::AofIoMode::kIoUring);
 }

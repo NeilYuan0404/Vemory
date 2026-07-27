@@ -4,6 +4,8 @@
 #include <string>
 #include <string_view>
 
+struct RequestContext;
+
 // Append RESP-encoded frames into an output buffer (caller owns the string).
 class RespEncode {
  public:
@@ -16,4 +18,8 @@ class RespEncode {
 
   // Common replies.
   static void AppendOk(std::string* out);
+
+  // Encode a write command as a RESP array (SET/DEL/VSET/VDEL).
+  // Returns false if ctx.cmd is not a supported write.
+  static bool EncodeWriteCommand(const RequestContext& ctx, std::string* out);
 };

@@ -13,7 +13,6 @@ RESP semantic cache server (plus string KVS). Talk to it with a RESP client (`re
 ## Requirements
 
 - C++17 toolchain (`g++`)
-- [Protocol Buffers](https://protobuf.dev/) (`protoc`, `libprotobuf`) — AOF / replication `WalEntry` frames
 - Vendored [gperftools](https://github.com/gperftools/gperftools) under `third_party/gperftools` — default global heap (`libtcmalloc_minimal`, static-linked on `make`); refresh with `make gperftools-fetch`. Usearch still uses its own `mmap` arenas. Disable with `TCMALLOC=0`.
 - Vendored [usearch](https://github.com/unum-cloud/usearch) under `third_party/usearch` (already in tree; refresh with `make usearch-fetch`)
 - Vendored [spdlog](https://github.com/gabime/spdlog) under `third_party/spdlog` (already in tree; refresh with `make spdlog-fetch`)
@@ -173,7 +172,6 @@ Other targets:
 |--------|---------|
 | `make run` | Build and start `bin/vemory` |
 | `make test` | GoogleTest unit suite (`bin/unit_tests`) |
-| `make proto` | Regenerate `generated/VNode.pb.*` |
 | `make gperftools-fetch` | Re-vendor gperftools source into `third_party/gperftools` |
 | `make gperftools-clean` | Remove gperftools build/`prefix` (source kept) |
 | `make compile-commands` | Refresh `compile_commands.json` for clangd |
@@ -220,4 +218,4 @@ Design notes by layer:
 | Replication / PSYNC | [`docs/Persist/Replication.md`](docs/Persist/Replication.md) |
 | Embed index / semantic cache ANN | [`docs/Index/EmbedIndex.md`](docs/Index/EmbedIndex.md) |
 
-Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/` and `replication/`), schemas in `proto/` (`VNode.proto`, `WalEntry.proto`).
+Layout: public headers under `include/vemory/`, sources under `src/` (including `persist/` and `replication/`).

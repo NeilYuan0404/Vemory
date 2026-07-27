@@ -1,15 +1,8 @@
 # Storage Layer
 
-Owns string KVS (`KvStore`), semantic-cache nodes (`VNode` / `VNodeStorage` / `VNodeIndex`), and protobuf codec for RDB node state (`ProtobufVNodeCodec`). Mutation log / replication frames use `WalEntry` (see [`../Persist/Aof.md`](../Persist/Aof.md)).
+Owns string KVS (`KvStore`), semantic-cache nodes (`VNode` / `VNodeStorage` / `VNodeIndex`), and RESP codec for RDB node state (`RespVNodeCodec`). Mutation log / replication frames are RESP write commands (see [`../Persist/Aof.md`](../Persist/Aof.md)).
 
-Live command paths:
-
-- Semantic cache: `VSET` / `VGET` / `VDEL` → `VNodeIndex` (see also [`../Index/EmbedIndex.md`](../Index/EmbedIndex.md))
-- String KVS: `SET` / `GET` / `DEL` → `KvStore` via `KvsDispatcher`
-
-RDB snapshots live in [`../Persist/Snapshot.md`](../Persist/Snapshot.md) (`SnapshotManager`).
-
-Network / parse: [`../Protocol/Protocol.md`](../Protocol/Protocol.md).
+Live path: protocol dispatchers → `KvStore` / `VNodeIndex` (writes via `ApplyMutation`).
 
 ---
 
@@ -17,47 +10,34 @@ Network / parse: [`../Protocol/Protocol.md`](../Protocol/Protocol.md).
 
 | Belongs here | Does not belong here |
 |--------------|----------------------|
-| `KvStore` (SET/GET/DEL + Dump/Load) | RESP wire decode |
-| `VNode` / `VNodeStorage` / `VNodeIndex` | Snapshot fork / fsync / rename |
-| `ProtobufVNodeCodec` (RDB NODES section) | AOF / replication `WalEntry` frames |
+| `KvStore`, `VNode`, `VNodeStorage`, `VNodeIndex` | RESP wire decode |
+| `RespVNodeCodec` (RDB NODES) | AOF / replication framing |
 
 ---
 
-## KvStore
+## Two encodings
 
-In-memory string map for Redis-style `SET` / `GET` / `DEL`.
+| Purpose | Format |
+|---------|--------|
+| `RespVNodeCodec` (RDB NODES section) | RESP Array `[id, user_key, question, answer]` |
+| AOF / replication write frames | RESP commands (`SET`/`DEL`/`VSET`/`VDEL`); vectors as bulk bytes |
 
-| API | Notes |
-|-----|-------|
-| `Set` / `Get` / `Del` | Average O(1); empty key rejected on Set |
-| `Dump` / `Load` | Binary snapshot segment for the KV section of `dump.rdb` |
-
----
-
-## VNode / VNodeStorage / VNodeIndex
-
-`VNode` = `{id, user_key, question, answer}`. Vectors live only in `USearchEmbedIndex`.
-
-| Component | Role |
-|-----------|------|
-| `VNodeStorage` | `by_id` + `by_user_key`; same `user_key` reuses id; `Restore` / `ForEach` for snapshot |
-| `VNodeIndex` | Orchestrates storage + ANN; `DumpNodes` / `LoadNodes` / `SaveIndex` / `LoadIndex` |
+Do not reuse node snapshot encoding for the mutation log.
 
 ---
 
-## ProtobufVNodeCodec
+## RespVNodeCodec
 
-Encode/decode `VNode` ↔ protobuf (`id`, `user_key`, `question`, `answer`). Used by snapshot nodes file; not on the hot `VSET` path.
+Encode/decode `VNode` ↔ RESP (`id` as decimal bulk, `user_key`, `question`, `answer`). Used by snapshot NODES section; not on the hot `VSET` path.
 
 ---
 
 ## Paths
 
-| Component | Header / schema | Source |
-|-----------|-----------------|--------|
+| Component | Header | Source |
+|-----------|--------|--------|
 | KvStore | `include/vemory/storage/KvStore.h` | `src/storage/KvStore.cc` |
-| VNode | `include/vemory/storage/VNode.h` | (header-only) |
+| VNode | `include/vemory/storage/VNode.h` | — |
 | VNodeStorage | `include/vemory/storage/VNodeStorage.h` | `src/storage/VNodeStorage.cc` |
 | VNodeIndex | `include/vemory/storage/VNodeIndex.h` | `src/storage/VNodeIndex.cc` |
-| ProtobufVNodeCodec | `include/vemory/storage/ProtobufVNodeCodec.h` | `src/storage/ProtobufVNodeCodec.cc` |
-| VNode.proto | `proto/VNode.proto` | `generated/VNode.pb.{h,cc}` |
+| RespVNodeCodec | `include/vemory/storage/RespVNodeCodec.h` | `src/storage/RespVNodeCodec.cc` |

@@ -1,6 +1,6 @@
 # Persist Layer — Replication (PSYNC + stream)
 
-Master/slave replication: temporary RDB fullsync under `tmp/`, in-memory backlog for catch-up, then **main-thread direct push** of `WalEntry` frames to synced replicas (Redis-style). Independent of local RDB persistence (`persistence.dir` / `dump.rdb` / `SAVE`).
+Master/slave replication: temporary RDB fullsync under `tmp/`, in-memory backlog for catch-up, then **main-thread direct push** of RESP write-command frames to synced replicas (Redis-style). Independent of local RDB persistence (`persistence.dir` / `dump.rdb` / `SAVE`).
 
 Partial resync: reconnecting slaves send `PSYNC <replid> <offset>`; if the offset is still in the backlog, master replies `+CONTINUE` and sends the gap as raw frames (no RDB).
 
@@ -46,16 +46,16 @@ Master → slave (fullsync):
 $<rdb_nbytes>\r\n
 <rdb bytes>              # sendfile(tmp/repl-fullsync.rdb)
 $<backlog_nbytes>\r\n
-<backlog bytes>           # u32le + WalEntry frames [cut, tip)
-# then continuous bare frames:
-<u32le len><WalEntry proto> ...
+<backlog bytes>           # RESP write commands [cut, tip)
+# then continuous bare RESP write commands:
+*3\r\n$3\r\nSET\r\n...
 ```
 
 Master → slave (partial):
 
 ```text
 +CONTINUE\r\n
-<u32le len><WalEntry proto> ...   # catch-up [offset, tip), then live stream
+*3\r\n$3\r\nSET\r\n...   # catch-up [offset, tip), then live stream
 ```
 
 `replid` is a process-lifetime 40-hex id (new on master restart). Offset is a byte position in the encoded backlog stream.
@@ -64,7 +64,7 @@ Master → slave (partial):
 
 ## Backlog + direct push
 
-- Ring buffer (default 16 MiB) of encoded `WalEntry` frames
+- Ring buffer (default 16 MiB) of encoded RESP write-command frames
 - On successful client mutation: **encode once** → always append backlog → `Send` to each `kSynced` slave (main thread)
 - Slaves still in fullsync (`kWaitRdb` / `kSending*`) only receive via the backlog bulk, not live `Send`
 - Fullsync start records `backlog_start_offset`; after RDB sendfile, master sends `[start, tip)` as the second RESP bulk

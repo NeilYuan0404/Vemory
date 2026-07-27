@@ -3,7 +3,7 @@
 #include <cstring>
 #include <vector>
 
-#include "vemory/storage/ProtobufVNodeCodec.h"
+#include "vemory/storage/RespVNodeCodec.h"
 
 VNodeIndex::VNodeIndex(std::size_t default_capacity)
     : default_capacity_(default_capacity == 0 ? 1024 : default_capacity) {}
@@ -169,11 +169,11 @@ VNodeIndex::Status VNodeIndex::DumpNodes(FILE* fp) const {
   if (fp == nullptr) {
     return Status::kBadValue;
   }
-  ProtobufVNodeCodec codec;
+  RespVNodeCodec codec;
   Status st = Status::kOk;
   storage_.ForEach([&](uint16_t /*id*/, const VNode& node) {
     std::string bytes;
-    if (codec.Encode(node, &bytes) != ProtobufVNodeCodec::Status::kOk) {
+    if (codec.Encode(node, &bytes) != RespVNodeCodec::Status::kOk) {
       st = Status::kError;
       return false;
     }
@@ -194,7 +194,7 @@ VNodeIndex::Status VNodeIndex::LoadNodes(FILE* fp, uint64_t node_count,
     return Status::kBadValue;
   }
   storage_.Clear();
-  ProtobufVNodeCodec codec;
+  RespVNodeCodec codec;
   for (uint64_t i = 0; i < node_count; ++i) {
     uint32_t len = 0;
     if (!ReadExact(fp, &len, sizeof(len))) {
@@ -205,7 +205,7 @@ VNodeIndex::Status VNodeIndex::LoadNodes(FILE* fp, uint64_t node_count,
       return Status::kIoError;
     }
     VNode node;
-    if (codec.Decode(bytes, &node) != ProtobufVNodeCodec::Status::kOk) {
+    if (codec.Decode(bytes, &node) != RespVNodeCodec::Status::kOk) {
       return Status::kError;
     }
     if (storage_.Restore(std::move(node)) != VNodeStorage::Status::kOk) {

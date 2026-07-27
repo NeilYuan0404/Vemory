@@ -32,7 +32,7 @@ struct Config {
   // Snapshot directory; empty disables SAVE. Default: data/
   std::string persistence_dir = "data";
   bool load_on_startup = false;
-  // Append-only protobuf log under persistence_dir/appendonly.aof
+  // Append-only RESP write-command log under persistence_dir/appendonly.aof
   bool aof = false;
   AofFsyncPolicy aof_fsync = AofFsyncPolicy::kEverySec;
   AofIoMode aof_io = AofIoMode::kThread;

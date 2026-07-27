@@ -1,10 +1,12 @@
 # Persist Layer — AOF (WAL)
 
-Append-only protobuf log of write mutations. Complements single-file RDB snapshots ([`Snapshot.md`](Snapshot.md)).
+Append-only RESP write-command log. Complements single-file RDB snapshots ([`Snapshot.md`](Snapshot.md)).
 
-Live path: successful `SET` / `DEL` / `VSET` / `VDEL` → `ApplyMutation` → `WalManager::Append` (encode + enqueue) → `AofWriter` background thread (batched `thread` fwrite or `io_uring` writev), then optional `fdatasync` per `aof_fsync`.
+Live path: successful `SET` / `DEL` / `VSET` / `VDEL` → `ApplyMutation` → encode RESP once → `WalManager::AppendFrame` + replication `FeedEncodedFrame` → background AOF flush, then optional `fdatasync` per `aof_fsync`.
 
 Startup: optional `SnapshotManager::Load`, then `WalManager::Replay` (`MutateSource::kAofReplay` does **not** re-append).
+
+**Breaking:** pre-RESP AOF (`u32le` + protobuf `WalEntry`) is not loaded — delete/rebuild `appendonly.aof`.
 
 ---
 
@@ -28,9 +30,9 @@ Empty `dir` disables AOF even if `aof=true`.
 |-------|----------|
 | `auto` | Try io_uring (needs `liburing` + capable kernel); on failure use `thread` |
 | `thread` | Bounded queue + flush thread + batched `fwrite` / one `fflush` per batch (**recommended**) |
-| `iouring` | SPSC `RingBuffer` + flush thread; batches frames into pipelined `io_uring` `writev` (`submit` + `peek_cqe`, up to 8 in-flight); fallback to `thread` + warn if unavailable. **Experimental — not recommended for real use yet.** |
+| `iouring` | SPSC `RingBuffer` + flush thread; pipelined `io_uring` `writev` (`submit` + `peek_cqe`); fallback to `thread` + warn if unavailable. **Experimental.** |
 
-Both backends honor `aof_fsync`. Replay is always synchronous `fopen` read (not via io_uring).
+Both backends honor `aof_fsync`. Replay is always synchronous file read + RESP decode.
 
 ### `aof_fsync`
 
@@ -44,24 +46,18 @@ Both backends honor `aof_fsync`. Replay is always synchronous `fopen` read (not 
 
 ---
 
-## Two protobuf schemas
+## On-disk format
 
-| Message | File | Role |
-|---------|------|------|
-| `VNodePb` | `proto/VNode.proto` | RDB node **state** (no vector) via `ProtobufVNodeCodec` |
-| `WalEntry` | `proto/WalEntry.proto` | One **mutation** (SET/DEL/VSET/VDEL; VSET includes `vector`) |
-
-AOF and replication share `WalEntry` frames. Do not reuse `ProtobufVNodeCodec` for the log.
-
----
-
-## On-disk frame
+Concatenated RESP write commands (Redis-style), no length prefix:
 
 ```text
-u32le payload_len | protobuf WalEntry bytes
+*3\r\n$3\r\nSET\r\n$…\r\n<key>\r\n$…\r\n<value>\r\n
+*5\r\n$4\r\nVSET\r\n$…\r\n<vector_blob>\r\n…
 ```
 
-No per-frame CRC. Truncated tail (incomplete length or payload) stops replay at the last good record.
+Supported ops: `SET`, `DEL`, `VSET`, `VDEL`. Vector payloads are RESP bulk bytes (raw float32). Truncated tail stops replay at the last complete command.
+
+AOF and replication share the same RESP frame bytes (encode once on the client write path).
 
 ---
 
@@ -69,12 +65,12 @@ No per-frame CRC. Truncated tail (incomplete length or payload) stops replay at 
 
 ```cpp
 enum class MutateSource { kClient, kAofReplay };
-ApplyMutation(entry, src, vnode_index, kv, wal);
+ApplyMutation(ctx, src, vnode_index, kv, wal, repl);
 ```
 
-| source | Mutate memory | Append AOF |
-|--------|---------------|------------|
-| `kClient` | yes | yes if `wal` enabled |
+| source | Mutate memory | Append AOF / feed repl |
+|--------|---------------|------------------------|
+| `kClient` | yes | yes if enabled / repl set |
 | `kAofReplay` | yes | no |
 
 DEL/VDEL miss (`integer_reply == 0`) does not append.
@@ -87,16 +83,12 @@ DEL/VDEL miss (`integer_reply == 0`) does not append.
 |-----------|------|
 | `WalManager` | `include/vemory/persist/WalManager.h` |
 | `AofWriter` | `include/vemory/persist/AofWriter.h` (`ThreadAofWriter` / `IoUringAofWriter`) |
-| `ApplyMutation` | `include/vemory/mutate/MutationApply.h`（共享突变层，非 AOF writer） |
+| `ApplyMutation` | `include/vemory/mutate/MutationApply.h` |
+| `RespEncode::EncodeWriteCommand` | `include/vemory/protocol/resp/RespEncode.h` |
 | `BlockingQueue` | `include/vemory/util/BlockingQueue.h` (`thread` backend) |
-| `RingBuffer` | `include/vemory/util/ringbuffer.h` (`iouring` backend; lock-free data + CV wake) |
+| `RingBuffer` | `include/vemory/util/ringbuffer.h` (`iouring` backend) |
 
-`Append` serializes on the caller thread and enqueues a complete frame via `AofWriter` (capacity 1024; full → block).
-
-- **thread**: flush thread `PopWaitFor` (1s), drains up to 32 frames, one `fwrite`+`fflush`, then `aof_fsync`.
-- **iouring**: flush thread pops from SPSC `RingBuffer`, `prep_writev` + `io_uring_submit` (frames kept alive in a PendingOp until CQE), non-blocking `io_uring_peek_cqe` reclaim (multiple batches in flight), then `aof_fsync` (`always` per completed batch; `everysec` on a timer / idle wake).
-
-`Flush()` waits until pending frames have completed writes (CQE for iouring) and then `fdatasync` when policy ≠ `no`.
+`ApplyMutation` (client) encodes one RESP frame, then enqueues to AOF and feeds the replication backlog. Flush thread pops batches and writes; `Flush()` waits until pending frames complete writes and then `fdatasync` when policy ≠ `no`.
 
 ---
 
@@ -104,6 +96,6 @@ DEL/VDEL miss (`integer_reply == 0`) does not append.
 
 - No AOF rewrite after `SAVE` (file only grows while enabled)
 - Crash may lose queued frames; under `everysec` also up to ~1s of OS-buffered data after write
-- `Append` success means enqueued, not durable on disk
-- Not Redis AOF / RESP format
+- Enqueue success means not durable on disk
+- Not Redis AOF rewrite / multi-part AOF
 - `io_uring` needs system `liburing` and a capable kernel; otherwise `aof_io=auto|iouring` falls back to `thread`

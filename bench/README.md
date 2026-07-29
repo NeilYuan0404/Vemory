@@ -4,7 +4,7 @@ Requires a running server (`./bin/vemory` or `./bin/vemory <port>`).
 
 Default: `HOST=127.0.0.1`, `PORT=6379`.
 
-Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`, `repl.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`repl_bench.py`](repl_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py), [`tcmalloc_mem_bench.py`](tcmalloc_mem_bench.py).
+Smoke scripts live under [`smoke/`](smoke/) (`kvs.sh`, `pipeline.sh`, `vector.sh`, `vector_rdb.sh`, `repl.sh`). Compare / quality benches: [`pipeline_bench.py`](pipeline_bench.py), [`aof_bench.py`](aof_bench.py), [`repl_bench.py`](repl_bench.py), [`vector_metrics.py`](vector_metrics.py), [`rdb_save_bench.py`](rdb_save_bench.py), [`rdb_load_bench.py`](rdb_load_bench.py), [`repl_fullsync_load_bench.py`](repl_fullsync_load_bench.py), [`tcmalloc_mem_bench.py`](tcmalloc_mem_bench.py).
 
 Semantic-cache vector benches use **Python + redis-py** (raw float32 blobs). Prefer `bench/.venv` after `pip install -r bench/requirements.txt`.
 
@@ -270,6 +270,55 @@ bench/.venv/bin/python bench/rdb_save_bench.py
 HOST=127.0.0.1 PORT=8989 N=100000 bench/.venv/bin/python bench/rdb_save_bench.py   # quicker smoke
 SAVE_BUSY=wait INTERVALS="100000 10000" PORT=8989 bench/.venv/bin/python bench/rdb_save_bench.py
 ```
+
+## RDB load (`rdb_load_bench.py`)
+
+Spawns a temp server, `VSET`+`SAVE`, restarts with `load_on_startup`, parses `load_ms=` from logs, samples RSS/VIRT. Point `VEMORY_BIN` at mmap or stdio binary for A/B (see below).
+
+```bash
+make -j$(nproc)
+make -j$(nproc) RDB_MMAP=0
+CARD=10000 DIM=64 ITERS=5 VEMORY_BIN=./bin/vemory \
+  bench/.venv/bin/python bench/rdb_load_bench.py
+CARD=10000 DIM=64 ITERS=5 VEMORY_BIN=./bin/vemory-stdio \
+  bench/.venv/bin/python bench/rdb_load_bench.py
+```
+
+## Replica fullsync load (`repl_fullsync_load_bench.py`)
+
+Temp master + `--slaveof` replica; reports `rdb_load_ms`, `fullsync_total_ms`, slave RSS/VIRT. mmap binary enables USEARCH **view** on `--slaveof`; stdio binary always copy-loads.
+
+```bash
+CARD=10000 VEMORY_BIN=./bin/vemory \
+  bench/.venv/bin/python bench/repl_fullsync_load_bench.py
+CARD=10000 VEMORY_BIN=./bin/vemory-stdio \
+  bench/.venv/bin/python bench/repl_fullsync_load_bench.py
+```
+
+## RDB mmap vs stdio
+
+Compile switch (no INI): `RDB_MMAP=1` (default) → `bin/vemory` (mmap load; USEARCH view when `--slaveof`); `RDB_MMAP=0` → `bin/vemory-stdio` (`FILE*`/`fread` only).
+
+**How to measure**
+
+1. Build both binaries (commands above).
+2. Run `rdb_load_bench.py` and `repl_fullsync_load_bench.py` with each `VEMORY_BIN`.
+3. Compare `load_ms_*` / `rdb_load_ms`, and replica `slave_rss_mb` / `slave_virt_mb`.
+
+Matrix: `DIM=64`, `CARD=10000`, `ITERS=5` (load bench, hot page cache). Small CARD may report `load_ms=0`; main win is large USEARCH + replica view RSS.
+
+### Results (indicative)
+
+WSL2, Linux 5.15, AMD Ryzen 7 7840HS (16 CPUs), ~15 GiB RAM, release `TCMALLOC=1`, ~4.6 MiB RDB (`CARD=10000` `DIM=64`).
+
+| Bench | Binary | Key metrics |
+|-------|--------|-------------|
+| RDB load (5 iters) | `bin/vemory` | `load_ms` p50 **12** / mean 12.4; RSS mean **37.0** MiB |
+| RDB load (5 iters) | `bin/vemory-stdio` | `load_ms` p50 **14** / mean 13.8; RSS mean **35.9** MiB |
+| Replica fullsync | `bin/vemory` (`mmap=1` `view=true`) | `rdb_load_ms` **7**; slave RSS **13.5** MiB / VIRT **26.0** MiB |
+| Replica fullsync | `bin/vemory-stdio` (`mmap=0` `view=0`) | `rdb_load_ms` **13**; slave RSS **21.4** MiB / VIRT **37.7** MiB |
+
+At this CARD, cold-ish load time is close; replica **view** cuts slave RSS (~37%) and VIRT vs stdio copy-load. Re-run after changes; optional `CARD=50000` for larger gaps.
 
 | Env | Default | Meaning |
 |-----|---------|---------|

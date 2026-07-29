@@ -19,6 +19,14 @@ else
   $(error Unknown MODE=$(MODE). Use debug, release, or test)
 endif
 
+# RDB load path: mmap (default) vs classic FILE*/fread. Separate object trees so
+# bin/vemory and bin/vemory-stdio can coexist for A/B benches.
+RDB_MMAP ?= 1
+ifeq ($(RDB_MMAP),0)
+  BUILD_ROOT := $(BUILD_ROOT)-stdio
+  MAIN_BIN_OVERRIDE := bin/vemory-stdio
+endif
+
 # --- USearch (header-only ANN) ---
 USEARCH_REPO   := https://github.com/unum-cloud/usearch.git
 USEARCH_TAG    := v2.17.6
@@ -65,6 +73,9 @@ else
   CXXFLAGS += -DVEMORY_HAVE_LIBURING=0
 endif
 
+# 1 = mmap RDB load (+ USEARCH view on --slaveof); 0 = FILE* fread only.
+CXXFLAGS += -DVEMORY_RDB_MMAP=$(RDB_MMAP)
+
 SRC := $(wildcard src/net/*.cc) \
        $(wildcard src/util/*.cc) \
        $(wildcard src/protocol/*.cc) \
@@ -79,6 +90,9 @@ OBJ := $(SRC:src/%.cc=$(BUILD_ROOT)/%.o)
 
 MAIN_SRC := src/Vemory.cc
 MAIN_BIN := bin/vemory
+ifdef MAIN_BIN_OVERRIDE
+  MAIN_BIN := $(MAIN_BIN_OVERRIDE)
+endif
 
 TEST_SRC := tests/testcase.cc
 TEST_BIN := bin/testcase

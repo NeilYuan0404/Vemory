@@ -268,6 +268,46 @@ VNodeIndex::Status VNodeIndex::LoadNodes(FILE* fp, uint64_t node_count,
   return Status::kOk;
 }
 
+VNodeIndex::Status VNodeIndex::LoadNodesFrom(const uint8_t* data,
+                                             std::size_t size,
+                                             uint64_t node_count,
+                                             uint16_t next_id) {
+  if (data == nullptr && size != 0) {
+    return Status::kBadValue;
+  }
+  const uint8_t* p = data;
+  const uint8_t* end = data + size;
+  storage_.Clear();
+  lru_.Clear();
+  RespVNodeCodec codec;
+  for (uint64_t i = 0; i < node_count; ++i) {
+    if (static_cast<std::size_t>(end - p) < sizeof(uint32_t)) {
+      return Status::kIoError;
+    }
+    uint32_t len = 0;
+    std::memcpy(&len, p, sizeof(len));
+    p += sizeof(len);
+    if (static_cast<std::size_t>(end - p) < len) {
+      return Status::kIoError;
+    }
+    std::string_view bytes(reinterpret_cast<const char*>(p), len);
+    p += len;
+    VNode node;
+    if (codec.Decode(bytes, &node) != RespVNodeCodec::Status::kOk) {
+      return Status::kError;
+    }
+    if (storage_.Restore(std::move(node)) != VNodeStorage::Status::kOk) {
+      return Status::kError;
+    }
+  }
+  if (p != end) {
+    return Status::kIoError;
+  }
+  storage_.SetNextId(next_id == 0 ? 1 : next_id);
+  RebuildLruFromStorage();
+  return Status::kOk;
+}
+
 VNodeIndex::Status VNodeIndex::SaveIndex(FILE* fp) const {
   if (fp == nullptr) {
     return Status::kBadValue;
@@ -285,6 +325,26 @@ VNodeIndex::Status VNodeIndex::LoadIndex(FILE* fp, std::size_t dim) {
   }
   auto idx = std::make_unique<USearchEmbedIndex>(dim, default_capacity_);
   if (idx->Load(fp) != USearchEmbedIndex::Status::kOk) {
+    return Status::kIoError;
+  }
+  if (idx->dimensions() != dim) {
+    return Status::kDimMismatch;
+  }
+  dim_ = dim;
+  index_ = std::move(idx);
+  return Status::kOk;
+}
+
+VNodeIndex::Status VNodeIndex::LoadIndexMapped(const std::string& path,
+                                               std::size_t offset,
+                                               std::size_t dim, bool view) {
+  if (path.empty() || dim == 0) {
+    return Status::kBadValue;
+  }
+  auto idx = std::make_unique<USearchEmbedIndex>(dim, default_capacity_);
+  const auto st = view ? idx->ViewMapped(path, offset)
+                       : idx->LoadMapped(path, offset);
+  if (st != USearchEmbedIndex::Status::kOk) {
     return Status::kIoError;
   }
   if (idx->dimensions() != dim) {

@@ -103,3 +103,59 @@ KvStore::Status KvStore::Load(FILE* fp) {
   }
   return Status::kOk;
 }
+
+KvStore::Status KvStore::LoadFrom(const uint8_t* data, std::size_t size) {
+  if (data == nullptr && size != 0) {
+    return Status::kBadValue;
+  }
+  const uint8_t* p = data;
+  const uint8_t* end = data + size;
+  auto need = [&](std::size_t n) -> bool {
+    return static_cast<std::size_t>(end - p) >= n;
+  };
+  auto take = [&](void* dst, std::size_t n) -> bool {
+    if (!need(n)) {
+      return false;
+    }
+    if (n > 0) {
+      std::memcpy(dst, p, n);
+    }
+    p += n;
+    return true;
+  };
+
+  uint64_t count = 0;
+  if (!take(&count, sizeof(count))) {
+    return Status::kIoError;
+  }
+  map_.clear();
+  map_.reserve(static_cast<std::size_t>(count));
+  for (uint64_t i = 0; i < count; ++i) {
+    uint32_t key_len = 0;
+    uint32_t val_len = 0;
+    if (!take(&key_len, sizeof(key_len))) {
+      return Status::kIoError;
+    }
+    if (!need(key_len)) {
+      return Status::kIoError;
+    }
+    std::string key(reinterpret_cast<const char*>(p), key_len);
+    p += key_len;
+    if (!take(&val_len, sizeof(val_len))) {
+      return Status::kIoError;
+    }
+    if (!need(val_len)) {
+      return Status::kIoError;
+    }
+    std::string val(reinterpret_cast<const char*>(p), val_len);
+    p += val_len;
+    if (key.empty()) {
+      return Status::kBadValue;
+    }
+    map_.emplace(std::move(key), std::move(val));
+  }
+  if (p != end) {
+    return Status::kIoError;
+  }
+  return Status::kOk;
+}

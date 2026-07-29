@@ -150,6 +150,12 @@ int main(int argc, char** argv) {
   KvStore kv;
   kv.Reserve(cfg.kv_reserve);
   SnapshotManager snapshot(&vnode_index, &kv, cfg.persistence_dir);
+#if VEMORY_RDB_MMAP
+  // USEARCH mmap view only on readonly replicas (immutable index).
+  snapshot.SetUsearchMmapView(cfg.slaveof);
+#else
+  snapshot.SetUsearchMmapView(false);
+#endif
   WalManager wal(&vnode_index, &kv, cfg.persistence_dir, cfg.aof, cfg.aof_fsync,
                  cfg.aof_io, cfg.aof_flush_interval_ms);
 

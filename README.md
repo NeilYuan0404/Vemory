@@ -22,13 +22,13 @@ RESP semantic cache server (plus string KVS). Talk to it with a RESP client (`re
 ```bash
 make              # → bin/vemory (builds vendored tcmalloc if needed, then links it)
 make TCMALLOC=0   # system allocator instead of tcmalloc
+make RDB_MMAP=0   # → bin/vemory-stdio (classic FILE* RDB load; A/B vs default mmap)
 ./bin/vemory      # listen 0.0.0.0:6379 (master)
 ./bin/vemory 8989 # custom port
 ./bin/vemory -c conf/vemory.ini
 ./bin/vemory -c conf/vemory.ini 8989  # CLI port overrides server.port
 ./bin/vemory --slaveof 127.0.0.1 6379 6380  # replica: PSYNC fullsync + stream (client writes → READONLY)
 ```
-
 ```bash
 redis-cli                 # default port 6379
 redis-cli -p 8989
@@ -54,6 +54,8 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `persistence` | `aof_flush_interval_ms` | `1000` | Soft flush interval for inline AOF buffer |
 
 Unknown sections/keys are ignored (warned). A positional port still overrides `server.port`.
+
+RDB load path is a **compile** option (`RDB_MMAP`, default `1` → mmap `bin/vemory`; `0` → `bin/vemory-stdio`). On an mmap build, `--slaveof` enables USEARCH view (no INI). Measurement: [bench/README.md](bench/README.md#rdb-mmap-vs-stdio).
 
 Snapshot file under `data/dump.rdb` by default (Header + TOC + KV/NODES/USEARCH). `SAVE` forks a background writer. Optional AOF: enable `persistence.aof` (same-thread buffer + inline io_uring by default, or flush thread; `aof_fsync` controls durability).
 

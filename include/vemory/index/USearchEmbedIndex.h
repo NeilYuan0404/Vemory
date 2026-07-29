@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 // Usearch-backed ANN embed index. Keyed by the same uint16_t id as VNodeIndex.
@@ -43,6 +44,11 @@ class USearchEmbedIndex {
   // Persist / restore the underlying usearch index (vectors + graph) via stream.
   Status Save(FILE* fp) const;
   Status Load(FILE* fp);
+  // Copy-load from a file region (RDB USEARCH TOC offset).
+  Status LoadMapped(const std::string& path, std::size_t offset);
+  // Zero-copy view of a file region; index becomes immutable until Clear/reload.
+  Status ViewMapped(const std::string& path, std::size_t offset);
+  bool is_viewed() const { return viewed_; }
 
   std::size_t dimensions() const { return dimensions_; }
 
@@ -56,4 +62,5 @@ class USearchEmbedIndex {
   std::unique_ptr<Impl> impl_;
   std::size_t dimensions_ = 0;
   std::size_t capacity_ = 0;
+  bool viewed_ = false;
 };

@@ -22,6 +22,7 @@
 ```bash
 make              # → bin/vemory（如需会先编译内置 tcmalloc，再链接）
 make TCMALLOC=0   # 使用系统分配器，不链接 tcmalloc
+make RDB_MMAP=0   # → bin/vemory-stdio（经典 FILE* RDB 加载；与默认 mmap 做 A/B）
 ./bin/vemory      # 监听 0.0.0.0:6379（master）
 ./bin/vemory 8989 # 自定义端口
 ./bin/vemory -c conf/vemory.ini
@@ -54,6 +55,8 @@ redis-cli -p 8989
 | `persistence` | `aof_flush_interval_ms` | `1000` | inline AOF 缓冲软刷间隔（毫秒） |
 
 未知节/键会被忽略（并告警）。位置参数端口仍会覆盖 `server.port`。
+
+RDB 加载路径为**编译选项**（`RDB_MMAP`，默认 `1` → mmap `bin/vemory`；`0` → `bin/vemory-stdio`）。mmap 构建下 `--slaveof` 对 USEARCH 使用 view（无 INI）。测法见 [bench/README.md](bench/README.md#rdb-mmap-vs-stdio)。
 
 快照文件默认在 `data/dump.rdb`（Header + TOC + KV/NODES/USEARCH）。`SAVE` 为 fork 后台写盘。可选 AOF：开启 `persistence.aof`（默认同线程缓冲 + inline io_uring，或刷盘线程；`aof_fsync` 控制耐久性）。
 

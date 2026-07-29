@@ -56,8 +56,13 @@ class VNodeIndex {
   // Snapshot helpers (nodes segment + usearch segment).
   Status DumpNodes(FILE* fp) const;
   Status LoadNodes(FILE* fp, uint64_t node_count, uint16_t next_id);
+  Status LoadNodesFrom(const uint8_t* data, std::size_t size,
+                       uint64_t node_count, uint16_t next_id);
   Status SaveIndex(FILE* fp) const;
   Status LoadIndex(FILE* fp, std::size_t dim);
+  // path + USEARCH TOC offset; view=true uses usearch mmap view (immutable).
+  Status LoadIndexMapped(const std::string& path, std::size_t offset,
+                         std::size_t dim, bool view);
   void Clear();
 
  private:

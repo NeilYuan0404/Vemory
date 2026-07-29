@@ -11,9 +11,15 @@
 #include "vemory/storage/VNodeIndex.h"
 #include "vemory/util/Timer.h"
 
+#ifndef VEMORY_RDB_MMAP
+#define VEMORY_RDB_MMAP 1
+#endif
+
 // Single-file RDB snapshot: dump.rdb (Header + TOC + KV/NODES/USEARCH).
 // SAVE forks a child to write; Load runs on the calling thread.
 // BackgroundSaveToPath / LoadFromPath accept arbitrary paths (replication tmp/).
+// RDB load: VEMORY_RDB_MMAP=1 (default, mmap) or 0 (FILE* fread). Compile via
+// make RDB_MMAP=0 → bin/vemory-stdio.
 class SnapshotManager {
  public:
   enum class Status : uint8_t {
@@ -34,6 +40,11 @@ class SnapshotManager {
   bool save_in_progress() const { return child_pid_ > 0; }
 
   void SetSaveDoneCallback(SaveDoneCallback cb) { save_done_cb_ = std::move(cb); }
+
+  // When true, USEARCH section is opened via usearch view (immutable).
+  // Intended for replica_readonly; masters should keep false (copy-load).
+  void SetUsearchMmapView(bool enabled) { usearch_mmap_view_ = enabled; }
+  bool usearch_mmap_view() const { return usearch_mmap_view_; }
 
   // Fork child to write dir/dump.rdb; requires configured dir.
   Status BackgroundSave();
@@ -79,7 +90,10 @@ class SnapshotManager {
   static constexpr long kHeaderBytes = 96;
 
   Status SaveToPath(const std::string& final_path) const;
-  Status LoadFromFile(FILE* fp);
+  Status LoadFromFile(FILE* fp);  // stdio path
+#if VEMORY_RDB_MMAP
+  Status LoadFromMapped(const std::string& path);
+#endif
 
   std::string Path(std::string_view name) const;
   Status WriteHeader(FILE* fp, const Header& header) const;
@@ -96,4 +110,5 @@ class SnapshotManager {
   std::string pending_save_path_;
   SaveDoneCallback save_done_cb_;
   TimerNode* reap_timer_ = nullptr;
+  bool usearch_mmap_view_ = false;
 };

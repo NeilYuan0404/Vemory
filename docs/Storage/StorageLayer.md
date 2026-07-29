@@ -43,4 +43,6 @@ Encode/decode `VNode` ↔ RESP (`id` as decimal bulk, `user_key`, `question`, `a
 | VNodeStorage | `include/vemory/storage/VNodeStorage.h` | `src/storage/VNodeStorage.cc` |
 | VNodeIndex | `include/vemory/storage/VNodeIndex.h` | `src/storage/VNodeIndex.cc` |
 | LruOrder | `include/vemory/util/LruOrder.h` | — |
+| MappedFile | `include/vemory/util/MappedFile.h` | `src/util/MappedFile.cc` |
+| RdbFormat | `include/vemory/persist/RdbFormat.h` | — |
 | RespVNodeCodec | `include/vemory/storage/RespVNodeCodec.h` | `src/storage/RespVNodeCodec.cc` |

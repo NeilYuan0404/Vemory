@@ -54,15 +54,28 @@ dump.rdb
 
 | Segment | Content |
 |---------|---------|
-| KV | KvStore binary (`KvStore::Dump` / `Load`) |
+| KV | KvStore binary (`KvStore::Dump` / `Load` / `LoadFrom`) |
 | NODES | length-prefixed RESP Array via `RespVNodeCodec` (`[id, user_key, question, answer]`; no vectors) |
-| USEARCH | usearch native bytes (`USearchEmbedIndex::Save` / `Load` on `FILE*`); omitted when `dim == 0` (`toc[2].length = 0`) |
+| USEARCH | usearch native bytes; load via mmap copy (`LoadMapped`) or replica **view** (`ViewMapped`) |
+
+**Load path:** controlled at **compile time** (`make` → `-DVEMORY_RDB_MMAP=1` default; `make RDB_MMAP=0` → stdio).
+
+| Build | Binary | Behavior |
+|-------|--------|----------|
+| `make` | `bin/vemory` | mmap whole RDB; KV/NODES from mapped spans; USEARCH copy-load on master; **view** on `--slaveof` |
+| `make RDB_MMAP=0` | `bin/vemory-stdio` | classic `fopen`/`fread` (`LoadFromFile`); no USEARCH view |
+
+mmap open failure still falls back to `FILE*` once. **Limit:** while a replica holds a USEARCH view, do not delete/replace the loaded RDB file.
 
 Write path: write `dump.rdb.tmp` (header reserved, then payloads, then rewrite header/TOC) → `fflush`/`fsync` → `rename` to `dump.rdb`. Successful SAVE also removes legacy multi-file names (`dump.meta` / `dump.kv` / `dump.nodes` / `dump.usearch` and `.tmp`).
 
 Format is Vemory-specific (not Redis RDB-compatible). **RDB v3 only** (v2 protobuf NODES not loaded). Optional RESP AOF: [`Aof.md`](Aof.md) (`persistence.aof`).
 
 Wire: `redis-cli SAVE` (default dir `data/`; empty `persistence.dir` disables).
+
+### Config (load)
+
+No INI switch for mmap/view — use `RDB_MMAP` at build time.
 
 ## SnapshotManager API
 

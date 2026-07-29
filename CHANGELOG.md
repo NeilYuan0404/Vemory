@@ -6,12 +6,17 @@ All notable changes to Vemory are documented in this file.
 
 ### Added
 - Semantic-cache `index.max_entries` + exact LRU: `VGET` hit touches order; client `VSET` may emit `VDEL` for the LRU victim before insert (AOF/replication).
+- RDB load via whole-file **mmap** (`MappedFile`), compile-time `RDB_MMAP=1` (default); `make RDB_MMAP=0` → `bin/vemory-stdio` classic fread path.
+- Replica USEARCH **mmap view** when `RDB_MMAP=1` and `--slaveof` (no INI switch).
+- Benches: [`bench/rdb_load_bench.py`](bench/rdb_load_bench.py), [`bench/repl_fullsync_load_bench.py`](bench/repl_fullsync_load_bench.py)
 
 ### Limits
 - `max_entries` bounds semantic-cache **entry count**, not RSS bytes; string `SET`/`DEL` are not covered
 - `VGET` touch is local only (not AOF/replicated); eviction follows the **master** access order — a replica’s locally hot key may still be deleted by a master `VDEL`
 - RDB / fullsync does not persist LRU order (rebuilt from load order)
 - Use the same `max_entries` on master and replica; `max_entries=0` disables LRU eviction but `uint16` (~65k) still applies
+- USEARCH mmap **view** is for readonly replicas (mmap build + `--slaveof`); do not delete the loaded RDB file while the view is held
+- Masters always copy-load USEARCH into RAM (mutable); switch load path with `make RDB_MMAP=0`, not INI
 
 ## [1.1.0] — 2026-07-28
 

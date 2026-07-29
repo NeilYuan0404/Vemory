@@ -34,6 +34,8 @@ class KvStore {
   // Binary dump: uint64 count + (u32 key_len, key, u32 val_len, val)*
   Status Dump(FILE* fp) const;
   Status Load(FILE* fp);
+  // Same format from a memory span (mmap load path).
+  Status LoadFrom(const uint8_t* data, std::size_t size);
 
  private:
   std::unordered_map<std::string, std::string> map_;

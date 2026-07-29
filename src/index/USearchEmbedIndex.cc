@@ -163,5 +163,60 @@ USearchEmbedIndex::Status USearchEmbedIndex::Load(FILE* fp) {
   }
   dimensions_ = impl_->index.dimensions();
   capacity_ = impl_->index.capacity() == 0 ? 1 : impl_->index.capacity();
+  viewed_ = false;
+  return Status::kOk;
+}
+
+USearchEmbedIndex::Status USearchEmbedIndex::LoadMapped(const std::string& path,
+                                                       std::size_t offset) {
+  if (path.empty() || dimensions_ == 0) {
+    return Status::kBadValue;
+  }
+  if (!impl_) {
+    metric_punned_t metric(dimensions_, metric_kind_t::cos_k,
+                           scalar_kind_t::f32_k);
+    auto made = index_dense_t::make(metric);
+    if (!made) {
+      return Status::kError;
+    }
+    impl_ = std::make_unique<Impl>();
+    impl_->index = std::move(made.index);
+  }
+  using unum::usearch::memory_mapped_file_t;
+  memory_mapped_file_t file(path.c_str());
+  auto result = impl_->index.load(std::move(file), offset);
+  if (!result) {
+    return Status::kError;
+  }
+  dimensions_ = impl_->index.dimensions();
+  capacity_ = impl_->index.capacity() == 0 ? 1 : impl_->index.capacity();
+  viewed_ = false;
+  return Status::kOk;
+}
+
+USearchEmbedIndex::Status USearchEmbedIndex::ViewMapped(const std::string& path,
+                                                       std::size_t offset) {
+  if (path.empty() || dimensions_ == 0) {
+    return Status::kBadValue;
+  }
+  if (!impl_) {
+    metric_punned_t metric(dimensions_, metric_kind_t::cos_k,
+                           scalar_kind_t::f32_k);
+    auto made = index_dense_t::make(metric);
+    if (!made) {
+      return Status::kError;
+    }
+    impl_ = std::make_unique<Impl>();
+    impl_->index = std::move(made.index);
+  }
+  using unum::usearch::memory_mapped_file_t;
+  memory_mapped_file_t file(path.c_str());
+  auto result = impl_->index.view(std::move(file), offset);
+  if (!result) {
+    return Status::kError;
+  }
+  dimensions_ = impl_->index.dimensions();
+  capacity_ = impl_->index.capacity() == 0 ? 1 : impl_->index.capacity();
+  viewed_ = true;
   return Status::kOk;
 }

@@ -26,6 +26,8 @@ Slave still listens on its local port for clients; client writes are rejected (`
 
 `SnapshotManager::BackgroundSaveToPath` / `LoadFromPath` do not check `dir_`. Empty `persistence.dir` still allows PSYNC.
 
+Slave `FinishRdbAndLoad` renames `tmp/repl-in.rdb.tmp` → `tmp/repl-in.rdb` then calls `LoadFromPath`. With a **mmap** build (`RDB_MMAP=1`, default), `--slaveof` enables USEARCH **view** of that file (immutable; do not unlink while the replica runs). A `RDB_MMAP=0` build uses stdio load only.
+
 ---
 
 ## Protocol

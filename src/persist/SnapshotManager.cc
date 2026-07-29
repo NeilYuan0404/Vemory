@@ -1,6 +1,7 @@
 #include "vemory/persist/SnapshotManager.h"
 
 #include <cerrno>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -10,6 +11,15 @@
 #include <unistd.h>
 
 #include <spdlog/spdlog.h>
+
+#ifndef VEMORY_RDB_MMAP
+#define VEMORY_RDB_MMAP 1
+#endif
+
+#if VEMORY_RDB_MMAP
+#include "vemory/persist/RdbFormat.h"
+#include "vemory/util/MappedFile.h"
+#endif
 
 namespace {
 
@@ -298,6 +308,86 @@ SnapshotManager::Status SnapshotManager::LoadFromFile(FILE* fp) {
   return Status::kOk;
 }
 
+#if VEMORY_RDB_MMAP
+SnapshotManager::Status SnapshotManager::LoadFromMapped(const std::string& path) {
+  if (path.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
+    return Status::kBadValue;
+  }
+
+  MappedFile mapped;
+  if (mapped.Open(path) != MappedFile::Status::kOk) {
+    return Status::kIoError;
+  }
+
+  rdb::Header rh;
+  const auto pst =
+      rdb::ParseHeader(mapped.data(), mapped.size(), &rh);
+  if (pst == rdb::ParseStatus::kIoError) {
+    return Status::kIoError;
+  }
+  if (pst != rdb::ParseStatus::kOk) {
+    return Status::kError;
+  }
+
+  Header header;
+  header.version = rh.version;
+  header.flags = rh.flags;
+  header.dim = rh.dim;
+  header.next_id = rh.next_id;
+  header.pad = rh.pad;
+  header.kv_count = rh.kv_count;
+  header.node_count = rh.node_count;
+  header.toc[0] = {rh.toc[0].offset, rh.toc[0].length};
+  header.toc[1] = {rh.toc[1].offset, rh.toc[1].length};
+  header.toc[2] = {rh.toc[2].offset, rh.toc[2].length};
+
+  kv_->Clear();
+  {
+    const auto& e = header.toc[0];
+    const uint8_t* base = mapped.data() + e.offset;
+    if (kv_->LoadFrom(base, static_cast<std::size_t>(e.length)) !=
+        KvStore::Status::kOk) {
+      return Status::kIoError;
+    }
+  }
+  if (kv_->size() != static_cast<std::size_t>(header.kv_count)) {
+    return Status::kError;
+  }
+
+  vnode_index_->Clear();
+  {
+    const auto& e = header.toc[1];
+    const uint8_t* base = mapped.data() + e.offset;
+    if (vnode_index_->LoadNodesFrom(base, static_cast<std::size_t>(e.length),
+                                    header.node_count,
+                                    static_cast<uint16_t>(header.next_id)) !=
+        VNodeIndex::Status::kOk) {
+      return Status::kIoError;
+    }
+  }
+  if (vnode_index_->node_count() !=
+      static_cast<std::size_t>(header.node_count)) {
+    return Status::kError;
+  }
+
+  if (header.dim > 0) {
+    if (header.toc[2].length == 0) {
+      return Status::kError;
+    }
+    // Drop our mapping before usearch opens the same path (view keeps its own).
+    const std::size_t us_off = static_cast<std::size_t>(header.toc[2].offset);
+    const std::size_t dim = static_cast<std::size_t>(header.dim);
+    mapped.Close();
+    if (vnode_index_->LoadIndexMapped(path, us_off, dim, usearch_mmap_view_) !=
+        VNodeIndex::Status::kOk) {
+      return Status::kIoError;
+    }
+  }
+
+  return Status::kOk;
+}
+#endif  // VEMORY_RDB_MMAP
+
 SnapshotManager::Status SnapshotManager::Load() {
   if (dir_.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
     return Status::kNotConfigured;
@@ -309,13 +399,45 @@ SnapshotManager::Status SnapshotManager::LoadFromPath(const std::string& path) {
   if (path.empty() || vnode_index_ == nullptr || kv_ == nullptr) {
     return Status::kBadValue;
   }
+  const auto t0 = std::chrono::steady_clock::now();
+#if VEMORY_RDB_MMAP
+  const auto st = LoadFromMapped(path);
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - t0)
+                      .count();
+  if (st == Status::kOk) {
+    spdlog::info("RDB LoadFromPath ok path={} mmap=1 view={} load_ms={}", path,
+                 usearch_mmap_view_, ms);
+    return st;
+  }
+  // Fallback to buffered FILE* path if mmap failed to open.
+  FILE* fp = std::fopen(path.c_str(), "rb");
+  if (fp == nullptr) {
+    return Status::kIoError;
+  }
+  const auto fst = LoadFromFile(fp);
+  std::fclose(fp);
+  if (fst == Status::kOk) {
+    spdlog::info("RDB LoadFromPath fallback stdio ok path={} load_ms={}", path,
+                 ms);
+  }
+  return fst;
+#else
   FILE* fp = std::fopen(path.c_str(), "rb");
   if (fp == nullptr) {
     return Status::kIoError;
   }
   const auto st = LoadFromFile(fp);
   std::fclose(fp);
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - t0)
+                      .count();
+  if (st == Status::kOk) {
+    spdlog::info("RDB LoadFromPath ok path={} mmap=0 view=0 load_ms={}", path,
+                 ms);
+  }
   return st;
+#endif
 }
 
 void SnapshotManager::EnsureReapTimer() {

@@ -53,6 +53,25 @@ ApplyResult ApplyMutation(const RequestContext& ctx, MutateSource src,
         out.err = "index not available";
         return out;
       }
+      // Capacity eviction only on client writes (AOF/repl follow recorded VDELs).
+      if (src == MutateSource::kClient) {
+        while (vnode_index->NeedsRoomFor(ctx.user_key)) {
+          std::string victim;
+          const auto pst = vnode_index->PeekLruUserKey(&victim);
+          if (pst != VNodeIndex::Status::kOk || victim.empty()) {
+            out.err = "eviction failed";
+            return out;
+          }
+          RequestContext del_ctx;
+          del_ctx.cmd = CommandType::kVdel;
+          del_ctx.user_key = std::move(victim);
+          const auto del_ar =
+              ApplyMutation(del_ctx, src, vnode_index, kv, wal, repl);
+          if (!del_ar.ok) {
+            return del_ar;
+          }
+        }
+      }
       const auto st = vnode_index->Set(ctx.vector_blob, ctx.user_key,
                                        ctx.question, ctx.answer);
       switch (st) {

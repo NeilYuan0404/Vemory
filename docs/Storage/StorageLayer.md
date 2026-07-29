@@ -4,6 +4,8 @@ Owns string KVS (`KvStore`), semantic-cache nodes (`VNode` / `VNodeStorage` / `V
 
 Live path: protocol dispatchers → `KvStore` / `VNodeIndex` (writes via `ApplyMutation`).
 
+`VNodeIndex` may enforce `max_entries` (exact LRU): client `VSET` that needs room peeks the LRU victim and applies `VDEL` via `ApplyMutation` before insert; `VGET` hits touch order locally. See CHANGELOG Limits for replica hot-set caveats.
+
 ---
 
 ## Boundary
@@ -40,4 +42,5 @@ Encode/decode `VNode` ↔ RESP (`id` as decimal bulk, `user_key`, `question`, `a
 | VNode | `include/vemory/storage/VNode.h` | — |
 | VNodeStorage | `include/vemory/storage/VNodeStorage.h` | `src/storage/VNodeStorage.cc` |
 | VNodeIndex | `include/vemory/storage/VNodeIndex.h` | `src/storage/VNodeIndex.cc` |
+| LruOrder | `include/vemory/util/LruOrder.h` | — |
 | RespVNodeCodec | `include/vemory/storage/RespVNodeCodec.h` | `src/storage/RespVNodeCodec.cc` |

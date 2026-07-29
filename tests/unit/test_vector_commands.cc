@@ -183,3 +183,76 @@ TEST(CommandHandler, VsetBadBlob) {
   commands.Dispatch(set, &reply);
   EXPECT_EQ(reply, "-ERR invalid vector byte size\r\n");
 }
+
+TEST(VNodeIndex, MaxEntriesNeedsRoomAndPeek) {
+  VNodeIndex index(64, 2);
+  const auto a = FloatBlob({1.f, 0.f});
+  const auto b = FloatBlob({0.f, 1.f});
+  ASSERT_EQ(index.Set(a, "k1", "q1", "a1"), VNodeIndex::Status::kOk);
+  ASSERT_EQ(index.Set(b, "k2", "q2", "a2"), VNodeIndex::Status::kOk);
+  EXPECT_FALSE(index.NeedsRoomFor("k1"));
+  EXPECT_TRUE(index.NeedsRoomFor("k3"));
+  std::string victim;
+  ASSERT_EQ(index.PeekLruUserKey(&victim), VNodeIndex::Status::kOk);
+  EXPECT_EQ(victim, "k1");
+}
+
+TEST(CommandHandler, VsetEvictsLruAndTouchPreserves) {
+  VNodeIndex vnode(64, 2);
+  KvStore kv;
+  CommandHandler commands(&vnode, &kv);
+
+  auto vset = [&](const std::string& uk, const std::vector<float>& vec,
+                  const std::string& ans) {
+    RequestContext set;
+    set.cmd = CommandType::kVset;
+    set.vector_blob = FloatBlob(vec);
+    set.user_key = uk;
+    set.question = "q";
+    set.answer = ans;
+    std::string reply;
+    commands.Dispatch(set, &reply);
+    EXPECT_EQ(reply, "+OK\r\n") << uk;
+  };
+
+  vset("k1", {1.f, 0.f}, "a1");
+  vset("k2", {0.f, 1.f}, "a2");
+  EXPECT_EQ(vnode.node_count(), 2u);
+
+  // Touch k1 so k2 is LRU; insert k3 → evict k2.
+  RequestContext get;
+  get.cmd = CommandType::kVget;
+  get.vector_blob = FloatBlob({0.99f, 0.01f});
+  get.threshold = 0.2f;
+  std::string reply;
+  commands.Dispatch(get, &reply);
+  EXPECT_EQ(reply, "$2\r\na1\r\n");
+
+  vset("k3", {0.f, -1.f}, "a3");
+  EXPECT_EQ(vnode.node_count(), 2u);
+
+  RequestContext del_k2;
+  del_k2.cmd = CommandType::kVdel;
+  del_k2.user_key = "k2";
+  reply.clear();
+  commands.Dispatch(del_k2, &reply);
+  EXPECT_EQ(reply, ":0\r\n");
+
+  RequestContext del_k1;
+  del_k1.cmd = CommandType::kVdel;
+  del_k1.user_key = "k1";
+  reply.clear();
+  commands.Dispatch(del_k1, &reply);
+  EXPECT_EQ(reply, ":1\r\n");
+
+  // Overwrite existing key does not require eviction room.
+  vset("k3", {0.f, -1.f}, "a3b");
+  vset("k4", {1.f, 1.f}, "a4");
+  EXPECT_EQ(vnode.node_count(), 2u);
+  RequestContext del_k3;
+  del_k3.cmd = CommandType::kVdel;
+  del_k3.user_key = "k3";
+  reply.clear();
+  commands.Dispatch(del_k3, &reply);
+  EXPECT_EQ(reply, ":1\r\n");
+}

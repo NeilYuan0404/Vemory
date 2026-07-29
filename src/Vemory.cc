@@ -51,7 +51,7 @@ bool ParseArgs(int argc, char** argv, std::string* config_path,
                std::string* slaveof_host, uint16_t* slaveof_port) {
   *config_path = "";
   *port_override = false;
-  *port = 6379;
+  *port = 8888;
   *slaveof = false;
   *slaveof_host = "";
   *slaveof_port = 0;
@@ -115,7 +115,7 @@ bool ParseArgs(int argc, char** argv, std::string* config_path,
 int main(int argc, char** argv) {
   std::string config_path;
   bool port_override = false;
-  uint16_t cli_port = 6379;
+  uint16_t cli_port = 8888;
   bool slaveof = false;
   std::string slaveof_host;
   uint16_t slaveof_port = 0;
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
 
   EventLoop evloop;
   TcpServer server(evloop);
-  VNodeIndex vnode_index(cfg.default_capacity);
+  VNodeIndex vnode_index(cfg.default_capacity, cfg.max_entries);
   KvStore kv;
   kv.Reserve(cfg.kv_reserve);
   SnapshotManager snapshot(&vnode_index, &kv, cfg.persistence_dir);

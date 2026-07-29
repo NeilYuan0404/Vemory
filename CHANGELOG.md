@@ -4,6 +4,15 @@ All notable changes to Vemory are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Semantic-cache `index.max_entries` + exact LRU: `VGET` hit touches order; client `VSET` may emit `VDEL` for the LRU victim before insert (AOF/replication).
+
+### Limits
+- `max_entries` bounds semantic-cache **entry count**, not RSS bytes; string `SET`/`DEL` are not covered
+- `VGET` touch is local only (not AOF/replicated); eviction follows the **master** access order — a replica’s locally hot key may still be deleted by a master `VDEL`
+- RDB / fullsync does not persist LRU order (rebuilt from load order)
+- Use the same `max_entries` on master and replica; `max_entries=0` disables LRU eviction but `uint16` (~65k) still applies
+
 ## [1.1.0] — 2026-07-28
 
 Inline AOF on the reactor (kvstore-style) and RESP-only persistence wire format.

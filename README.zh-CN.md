@@ -45,6 +45,7 @@ redis-cli -p 8989
 | `logging` | `level` | `info` | `trace`/`debug`/`info`/`warn`/`error`/`critical`/`off` |
 | `storage` | `kv_reserve` | `100000` | `KvStore` 预留容量 |
 | `index` | `default_capacity` | `1024` | 语义缓存索引初始容量 |
+| `index` | `max_entries` | `0` | 语义缓存条目上限；`0` = 不启用 LRU 淘汰 |
 | `persistence` | `dir` | `data` | RDB 快照目录；空则 `SAVE` 不可用 |
 | `persistence` | `load_on_startup` | `false` | 启动时从 `dir` 加载 `dump.rdb` |
 | `persistence` | `aof` | `false` | RESP AOF：`dir/appendonly.aof` |

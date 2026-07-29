@@ -45,6 +45,7 @@ Optional file via `-c` (see [`conf/vemory.ini`](conf/vemory.ini)). Without `-c`,
 | `logging` | `level` | `info` | `trace`/`debug`/`info`/`warn`/`error`/`critical`/`off` |
 | `storage` | `kv_reserve` | `100000` | `KvStore` pre-reserve |
 | `index` | `default_capacity` | `1024` | Initial semantic-cache index capacity |
+| `index` | `max_entries` | `0` | Semantic-cache entry cap; `0` = no LRU eviction |
 | `persistence` | `dir` | `data` | RDB snapshot directory; empty disables `SAVE` |
 | `persistence` | `load_on_startup` | `false` | Load `dump.rdb` from `dir` on startup |
 | `persistence` | `aof` | `false` | RESP AOF at `dir/appendonly.aof` |

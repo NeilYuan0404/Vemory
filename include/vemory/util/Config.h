@@ -24,11 +24,13 @@ enum class AofIoMode : uint8_t {
 
 // Runtime settings loaded from an INI file (or left at built-in defaults).
 struct Config {
-  uint16_t port = 6379;
+  uint16_t port = 8888;
   std::string bind = "0.0.0.0";
   std::string log_level = "info";
   std::size_t kv_reserve = 100000;
   std::size_t default_capacity = 1024;
+  // Semantic-cache entry cap; 0 = no LRU eviction (still uint16 id limit).
+  std::size_t max_entries = 0;
   // Snapshot directory; empty disables SAVE. Default: data/
   std::string persistence_dir = "data";
   bool load_on_startup = false;

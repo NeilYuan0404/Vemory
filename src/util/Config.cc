@@ -130,6 +130,17 @@ bool ApplyKey(Config* cfg, const std::string& section, const std::string& key,
       cfg->default_capacity = static_cast<std::size_t>(v);
       return true;
     }
+    if (key == "max_entries") {
+      unsigned long long v = 0;
+      if (!ParseUint(value, &v)) {
+        if (error != nullptr) {
+          *error = "invalid index.max_entries: " + value;
+        }
+        return false;
+      }
+      cfg->max_entries = static_cast<std::size_t>(v);
+      return true;
+    }
   } else if (section == "persistence") {
     if (key == "dir") {
       cfg->persistence_dir = value;

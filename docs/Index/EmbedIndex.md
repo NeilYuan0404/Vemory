@@ -4,15 +4,18 @@
 
 ```
 VSET vector_blob user_key question answer
-  → VNodeDispatcher → VNodeIndex::Set
-  → VNodeStorage::Put + USearchEmbedIndex::Add
+  → VNodeDispatcher → ApplyMutation
+  → (if max_entries and full) Peek LRU → VDEL → then VNodeIndex::Set
+  → VNodeStorage::Put + USearchEmbedIndex::Add + LruOrder::Push
 
 VGET query_blob threshold
-  → VNodeIndex::Get → Search(k=1) → distance ≤ threshold → answer
+  → VNodeIndex::Get → Search(k=1) → distance ≤ threshold → answer + LruOrder::Touch
 
 VDEL user_key
-  → index.Del + VNodeStorage::DelByUserKey
+  → LruOrder::Erase + index.Del + VNodeStorage::DelByUserKey
 ```
+
+`max_entries` (config `index.max_entries`, `0` = off) bounds entry count for availability; touch is not replicated. Details: CHANGELOG Limits.
 
 ---
 

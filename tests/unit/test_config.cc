@@ -41,11 +41,12 @@ class TempIni {
 
 TEST(Config, Defaults) {
   vemory::Config cfg;
-  EXPECT_EQ(cfg.port, 6379);
+  EXPECT_EQ(cfg.port, 8888);
   EXPECT_EQ(cfg.bind, "0.0.0.0");
   EXPECT_EQ(cfg.log_level, "info");
   EXPECT_EQ(cfg.kv_reserve, 100000u);
   EXPECT_EQ(cfg.default_capacity, 1024u);
+  EXPECT_EQ(cfg.max_entries, 0u);
   EXPECT_EQ(cfg.persistence_dir, "data");
   EXPECT_FALSE(cfg.load_on_startup);
   EXPECT_FALSE(cfg.aof);
@@ -69,6 +70,7 @@ kv_reserve = 42
 
 [index]
 default_capacity = 2048
+max_entries = 100
 )");
   vemory::Config cfg;
   std::string err;
@@ -79,6 +81,7 @@ default_capacity = 2048
   EXPECT_EQ(cfg.log_level, "debug");
   EXPECT_EQ(cfg.kv_reserve, 42u);
   EXPECT_EQ(cfg.default_capacity, 2048u);
+  EXPECT_EQ(cfg.max_entries, 100u);
 }
 
 TEST(Config, CaseInsensitiveKeysAndSections) {
@@ -235,4 +238,20 @@ TEST(Config, BadAofIo) {
   std::string err;
   EXPECT_FALSE(vemory::LoadConfig(file.path(), &cfg, &err));
   EXPECT_NE(err.find("aof_io"), std::string::npos);
+}
+
+TEST(Config, MaxEntriesZeroAllowed) {
+  TempIni file("[index]\nmax_entries = 0\n");
+  vemory::Config cfg;
+  std::string err;
+  ASSERT_TRUE(vemory::LoadConfig(file.path(), &cfg, &err)) << err;
+  EXPECT_EQ(cfg.max_entries, 0u);
+}
+
+TEST(Config, BadMaxEntries) {
+  TempIni file("[index]\nmax_entries = no\n");
+  vemory::Config cfg;
+  std::string err;
+  EXPECT_FALSE(vemory::LoadConfig(file.path(), &cfg, &err));
+  EXPECT_NE(err.find("max_entries"), std::string::npos);
 }

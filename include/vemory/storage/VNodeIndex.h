@@ -9,6 +9,7 @@
 
 #include "vemory/index/USearchEmbedIndex.h"
 #include "vemory/storage/VNodeStorage.h"
+#include "vemory/util/LruOrder.h"
 
 // Orchestrates VNodeStorage + USearchEmbedIndex for semantic cache.
 class VNodeIndex {
@@ -24,21 +25,32 @@ class VNodeIndex {
     kError,
   };
 
-  explicit VNodeIndex(std::size_t default_capacity = 1024);
+  // max_entries == 0: no capacity eviction (still bounded by uint16 ids).
+  explicit VNodeIndex(std::size_t default_capacity = 1024,
+                      std::size_t max_entries = 0);
 
   // vector_blob: raw float bytes. Dim locked on first successful Set.
   Status Set(std::string_view vector_blob, std::string_view user_key,
              std::string_view question, std::string_view answer);
 
   // Hit if top-1 cosine distance <= threshold; writes answer on kOk.
+  // Touches LRU order on hit.
   Status Get(std::string_view query_blob, float distance_threshold,
-             std::string* out_answer) const;
+             std::string* out_answer);
 
   Status Del(std::string_view user_key);
+
+  // True if inserting user_key as a new entry would exceed max_entries_.
+  bool NeedsRoomFor(std::string_view user_key) const;
+
+  // Peek LRU victim user_key without removing from order (Del erases).
+  // Drops stale ids that are no longer in storage.
+  Status PeekLruUserKey(std::string* out_user_key);
 
   std::size_t dimensions() const { return dim_; }
   bool ready() const { return index_ != nullptr; }
   std::size_t node_count() const { return storage_.size(); }
+  std::size_t max_entries() const { return max_entries_; }
   uint16_t next_id() const { return storage_.next_id(); }
 
   // Snapshot helpers (nodes segment + usearch segment).
@@ -53,9 +65,12 @@ class VNodeIndex {
                              std::size_t* out_dim);
 
   Status EnsureIndex(std::size_t dim);
+  void RebuildLruFromStorage();
 
   std::size_t default_capacity_;
+  std::size_t max_entries_ = 0;
   std::size_t dim_ = 0;
   VNodeStorage storage_;
+  LruOrder lru_;
   std::unique_ptr<USearchEmbedIndex> index_;
 };

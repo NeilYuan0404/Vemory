@@ -5,8 +5,9 @@
 
 #include "vemory/storage/RespVNodeCodec.h"
 
-VNodeIndex::VNodeIndex(std::size_t default_capacity)
-    : default_capacity_(default_capacity == 0 ? 1024 : default_capacity) {}
+VNodeIndex::VNodeIndex(std::size_t default_capacity, std::size_t max_entries)
+    : default_capacity_(default_capacity == 0 ? 1024 : default_capacity),
+      max_entries_(max_entries) {}
 
 bool VNodeIndex::ParseFloatBlob(std::string_view blob, const float** out_data,
                                 std::size_t* out_dim) {
@@ -42,6 +43,14 @@ bool ReadExact(FILE* fp, void* data, std::size_t n) {
 
 }  // namespace
 
+void VNodeIndex::RebuildLruFromStorage() {
+  lru_.Clear();
+  storage_.ForEach([this](uint16_t id, const VNode&) {
+    lru_.Push(id);
+    return true;
+  });
+}
+
 VNodeIndex::Status VNodeIndex::EnsureIndex(std::size_t dim) {
   if (index_ != nullptr) {
     if (dim != dim_) {
@@ -59,6 +68,42 @@ VNodeIndex::Status VNodeIndex::EnsureIndex(std::size_t dim) {
   dim_ = dim;
   index_ = std::move(idx);
   return Status::kOk;
+}
+
+bool VNodeIndex::NeedsRoomFor(std::string_view user_key) const {
+  if (max_entries_ == 0 || user_key.empty()) {
+    return false;
+  }
+  VNode existing;
+  if (storage_.GetByUserKey(user_key, &existing) == VNodeStorage::Status::kOk) {
+    return false;
+  }
+  return storage_.size() >= max_entries_;
+}
+
+VNodeIndex::Status VNodeIndex::PeekLruUserKey(std::string* out_user_key) {
+  if (out_user_key == nullptr) {
+    return Status::kBadValue;
+  }
+  out_user_key->clear();
+  constexpr int kMaxStale = 65535;
+  for (int i = 0; i < kMaxStale; ++i) {
+    uint16_t id = 0;
+    if (!lru_.PeekLru(&id)) {
+      return Status::kNotFound;
+    }
+    VNode node;
+    if (storage_.GetById(id, &node) == VNodeStorage::Status::kOk) {
+      *out_user_key = node.user_key;
+      return Status::kOk;
+    }
+    // Stale id in order list — drop and continue.
+    uint16_t dropped = 0;
+    if (!lru_.PopLru(&dropped) || dropped != id) {
+      return Status::kError;
+    }
+  }
+  return Status::kNotFound;
 }
 
 VNodeIndex::Status VNodeIndex::Set(std::string_view vector_blob,
@@ -98,14 +143,16 @@ VNodeIndex::Status VNodeIndex::Set(std::string_view vector_blob,
   const auto ist = index_->Add(id, floats.data(), dim);
   if (ist != USearchEmbedIndex::Status::kOk) {
     storage_.DelByUserKey(user_key);
+    lru_.Erase(id);
     return Status::kError;
   }
+  lru_.Push(id);
   return Status::kOk;
 }
 
 VNodeIndex::Status VNodeIndex::Get(std::string_view query_blob,
                                    float distance_threshold,
-                                   std::string* out_answer) const {
+                                   std::string* out_answer) {
   if (out_answer == nullptr) {
     return Status::kBadValue;
   }
@@ -138,6 +185,7 @@ VNodeIndex::Status VNodeIndex::Get(std::string_view query_blob,
   if (storage_.GetById(hits[0].id, &node) != VNodeStorage::Status::kOk) {
     return Status::kNotFound;
   }
+  lru_.Touch(hits[0].id);
   *out_answer = std::move(node.answer);
   return Status::kOk;
 }
@@ -150,6 +198,7 @@ VNodeIndex::Status VNodeIndex::Del(std::string_view user_key) {
   if (storage_.GetByUserKey(user_key, &node) != VNodeStorage::Status::kOk) {
     return Status::kNotFound;
   }
+  lru_.Erase(node.id);
   if (index_ != nullptr) {
     (void)index_->Del(node.id);
   }
@@ -161,6 +210,7 @@ VNodeIndex::Status VNodeIndex::Del(std::string_view user_key) {
 
 void VNodeIndex::Clear() {
   storage_.Clear();
+  lru_.Clear();
   index_.reset();
   dim_ = 0;
 }
@@ -194,6 +244,7 @@ VNodeIndex::Status VNodeIndex::LoadNodes(FILE* fp, uint64_t node_count,
     return Status::kBadValue;
   }
   storage_.Clear();
+  lru_.Clear();
   RespVNodeCodec codec;
   for (uint64_t i = 0; i < node_count; ++i) {
     uint32_t len = 0;
@@ -213,6 +264,7 @@ VNodeIndex::Status VNodeIndex::LoadNodes(FILE* fp, uint64_t node_count,
     }
   }
   storage_.SetNextId(next_id == 0 ? 1 : next_id);
+  RebuildLruFromStorage();
   return Status::kOk;
 }
 

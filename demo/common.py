@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import struct
 import sys
+import time
+import uuid
 from typing import Iterable, Optional, Sequence, Union
 
 import redis
@@ -13,6 +15,9 @@ FloatSeq = Union[Sequence[float], Iterable[float]]
 
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "6379"))
+SLAVE_HOST = os.environ.get("SLAVE_HOST", HOST)
+SLAVE_PORT = int(os.environ.get("SLAVE_PORT", "6380"))
+SYNC_TIMEOUT_S = float(os.environ.get("SYNC_TIMEOUT_S", "30"))
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -39,6 +44,29 @@ def require_server(host: str = HOST, port: int = PORT) -> redis.Redis:
         return client
     except Exception as exc:  # noqa: BLE001
         die(f"server not responding at {host}:{port} ({exc})")
+
+
+def wait_get(
+    client: redis.Redis,
+    key: str,
+    expect: bytes,
+    *,
+    label: str = "GET",
+    timeout_s: float = SYNC_TIMEOUT_S,
+) -> None:
+    deadline = time.time() + timeout_s
+    got = None
+    while time.time() < deadline:
+        got = client.get(key)
+        if got == expect:
+            print(f"  {label}: GET {key} → {got!r}")
+            return
+        time.sleep(0.05)
+    die(f"{label} failed within {timeout_s}s (expected {expect!r}, last GET={got!r})")
+
+
+def unique_key(prefix: str) -> str:
+    return f"demo:{prefix}:{uuid.uuid4().hex[:8]}"
 
 
 def vset(
